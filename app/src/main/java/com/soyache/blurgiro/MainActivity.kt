@@ -80,7 +80,6 @@ class MainActivity : ComponentActivity() {
                             permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
                     },
-                    onOpenDeveloperSettings = { openDeveloperSettings() },
                 )
             }
         }
@@ -121,19 +120,5 @@ class MainActivity : ComponentActivity() {
     private fun openOverlaySettings() {
         val uri = Uri.parse("package:$packageName")
         startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, uri))
-    }
-
-    private fun openDeveloperSettings() {
-        val intents = listOf(
-            Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
-            Intent(Settings.ACTION_SETTINGS),
-        )
-        for (intent in intents) {
-            val launched = runCatching {
-                startActivity(intent)
-                true
-            }.getOrDefault(false)
-            if (launched) return
-        }
     }
 }
