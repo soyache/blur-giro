@@ -7,14 +7,14 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Máscara 0..1 del cristal: 0 = nítido, 1 = máximo desenfoque del *contenido*.
+ * Máscara 0..1 del cristal: 0 = nítido, 1 = máximo radio de blur del compositor.
  *
  * El lado que se **aleja** (el opuesto al giro) se va de foco.
  * Héctor: giro en X hacia la derecha → la izquierda se pone un poco blur;
  * de frente se quita el blur de todos los lugares.
  *
  * tiltX > 0 = derecha más cerca; el far side es la izquierda.
- * La Y pesa menos ([PerspectiveWarp.Y_WEIGHT]) para priorizar el eje X.
+ * La Y pesa menos ([Y_WEIGHT]) para priorizar el eje X.
  */
 object BlurMask {
 
@@ -29,7 +29,7 @@ object BlurMask {
         val px = u * 2f - 1f
         val py = v * 2f - 1f
         val tx = tiltX.coerceIn(-1f, 1f)
-        val ty = (tiltY * PerspectiveWarp.Y_WEIGHT).coerceIn(-1f, 1f)
+        val ty = (tiltY * Y_WEIGHT).coerceIn(-1f, 1f)
         val tiltMag = hypot(tx, ty)
 
         return when (mode) {
@@ -40,7 +40,7 @@ object BlurMask {
 
     fun cornerStrengths(tiltX: Float, tiltY: Float): CornerStrengths {
         val tx = tiltX.coerceIn(-1f, 1f)
-        val ty = (tiltY * PerspectiveWarp.Y_WEIGHT).coerceIn(-1f, 1f)
+        val ty = (tiltY * Y_WEIGHT).coerceIn(-1f, 1f)
         return CornerStrengths(
             topLeft = cornerInfluence(tx, ty, -1f, -1f),
             topRight = cornerInfluence(tx, ty, 1f, -1f),
@@ -54,7 +54,7 @@ object BlurMask {
      * 0 = izquierda, 1 = arriba, 2 = derecha, 3 = abajo.
      */
     fun farSide(tiltX: Float, tiltY: Float): Int {
-        val ty = tiltY * PerspectiveWarp.Y_WEIGHT
+        val ty = tiltY * Y_WEIGHT
         return if (abs(tiltX) >= abs(ty)) {
             if (tiltX >= 0f) 0 else 2
         } else {
@@ -63,13 +63,13 @@ object BlurMask {
     }
 
     fun directionalStrength(tiltX: Float, tiltY: Float): Float {
-        return hypot(tiltX, tiltY * PerspectiveWarp.Y_WEIGHT).coerceIn(0f, 1f)
+        return hypot(tiltX, tiltY * Y_WEIGHT).coerceIn(0f, 1f)
     }
 
     fun tiltEngage(tiltMag: Float): Float = smoothstep(ENGAGE_START, ENGAGE_FULL, tiltMag)
 
     fun effectAmount(tiltX: Float, tiltY: Float, intensity: Float): Float {
-        val mag = hypot(tiltX.coerceIn(-1f, 1f), tiltY.coerceIn(-1f, 1f) * PerspectiveWarp.Y_WEIGHT)
+        val mag = hypot(tiltX.coerceIn(-1f, 1f), tiltY.coerceIn(-1f, 1f) * Y_WEIGHT)
         return (tiltEngage(mag) * intensity.coerceIn(0f, 1f)).coerceIn(0f, 1f)
     }
 
@@ -122,4 +122,5 @@ object BlurMask {
 
     const val ENGAGE_START = 0.06f
     const val ENGAGE_FULL = 0.34f
+    const val Y_WEIGHT = 0.45f
 }

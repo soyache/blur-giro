@@ -16,7 +16,6 @@ import androidx.compose.material.icons.outlined.BlurOn
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,10 +31,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,7 +44,8 @@ fun HomeScreen(
     overlayOn: Boolean,
     canDrawOverlays: Boolean,
     notificationsGranted: Boolean,
-    captureDenied: Boolean,
+    blurApiSupported: Boolean,
+    crossWindowBlurEnabled: Boolean,
     intensity: Float,
     smoothness: Float,
     mode: BlurMode,
@@ -63,38 +59,10 @@ fun HomeScreen(
     onDeactivate: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
     onRequestNotifications: () -> Unit,
+    onOpenDeveloperSettings: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    var showCaptureDialog by rememberSaveable { mutableStateOf(false) }
-
-    if (showCaptureDialog) {
-        AlertDialog(
-            onDismissRequest = { showCaptureDialog = false },
-            title = { Text("Permiso para capturar la pantalla") },
-            text = {
-                Text(
-                    "Para que los iconos se vean desenfocados de verdad (como cuando giras el teléfono " +
-                        "hacia un lado), CristalGiro necesita ver lo que hay en pantalla. Android te va a " +
-                        "pedir permiso de captura.\n\n" +
-                        "No se guarda nada, no se envía a internet y no se activa a tus espaldas: solo " +
-                        "mientras la capa está encendida y tú lo acabas de conceder. Los toques siguen " +
-                        "pasando a las otras apps.\n\n" +
-                        "Si lo niegas, no activamos la capa. Un velo pintado no se parece a lo que pediste.",
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showCaptureDialog = false
-                        onActivate()
-                    },
-                ) { Text("Continuar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCaptureDialog = false }) { Text("Cancelar") }
-            },
-        )
-    }
+    val canActivate = canDrawOverlays && blurApiSupported && crossWindowBlurEnabled
 
     Scaffold(
         topBar = {
@@ -126,17 +94,45 @@ fun HomeScreen(
             Text(
                 "De frente el teléfono se ve normal: sin blur. Si lo giras en X (izquierda o derecha), " +
                     "el lado que se aleja se desenfoca un poco — los iconos se quedan, pero blandos — " +
-                    "y la pantalla parece que también gira. Al volver de frente se quita el blur de todos los lugares.",
+                    "porque el compositor desenfoca lo que hay detrás de unas bandas flotantes. " +
+                    "Al volver de frente se quitan las bandas. No grabamos la pantalla.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.onSurfaceVariant,
             )
+
+            if (!blurApiSupported) {
+                PermissionCard(
+                    title = "Hace falta Android 12 o superior",
+                    body = "El desenfoque de otras ventanas (Window.setBackgroundBlurRadius) solo existe " +
+                        "desde Android 12. En este aparato no hay API pública para desenfocar el launcher " +
+                        "sin capturar la pantalla, y CristalGiro se niega a grabar.",
+                    action = null,
+                    onAction = {},
+                )
+            } else if (!crossWindowBlurEnabled) {
+                PermissionCard(
+                    title = "El teléfono tiene el desenfoque entre ventanas desactivado",
+                    body = "CristalGiro usa la API pública del compositor (cross-window blur) para " +
+                        "desenfocar otras apps bajo ventanas translúcidas. Aquí " +
+                        "WindowManager.isCrossWindowBlurEnabled es falso: el sistema o el fabricante " +
+                        "no aplican blur cruzado.\n\n" +
+                        "Sin eso no podemos desenfocar el launcher ni otras apps. No vamos a pintar " +
+                        "un velo ni a pedir captura de pantalla.\n\n" +
+                        "En Pixel y AOSP a veces se enciende en Ajustes → Opciones de desarrollador → " +
+                        "Representación acelerada por hardware → Permitir desenfoques a nivel de ventana. " +
+                        "En muchas marcas (Xiaomi, Huawei, Oppo, Vivo, Samsung) no existe o no aplica " +
+                        "a overlays: CristalGiro no puede saltarse esa política.",
+                    action = "Abrir opciones de desarrollador",
+                    onAction = onOpenDeveloperSettings,
+                )
+            }
 
             if (!canDrawOverlays) {
                 PermissionCard(
                     title = "Permiso para mostrar sobre otras apps",
                     body = "Android llama a este permiso SYSTEM_ALERT_WINDOW («mostrar sobre otras apps»). " +
-                        "CristalGiro lo usa solo para dibujar la capa encima. No bloquea toques: las demás " +
-                        "apps se siguen usando. Puedes quitarlo cuando quieras en Ajustes.",
+                        "CristalGiro lo usa solo para colocar bandas flotantes no táctiles. No bloquea " +
+                        "toques y no lee el contenido de otras apps. Puedes quitarlo cuando quieras en Ajustes.",
                     action = "Conceder permiso",
                     onAction = onRequestOverlayPermission,
                 )
@@ -153,27 +149,18 @@ fun HomeScreen(
                 )
             }
 
-            if (captureDenied && !overlayOn) {
-                PermissionCard(
-                    title = "Hace falta el permiso de captura",
-                    body = "Sin captura no podemos desenfocar los iconos de verdad. Un tinte o una niebla " +
-                        "no sirven: se vería un velo, no el contenido fuera de foco. Vuelve a pulsar Activar " +
-                        "y acepta el diálogo del sistema.",
-                    action = "Reintentar",
-                    onAction = { showCaptureDialog = true },
-                )
-            }
-
             Card(
                 colors = CardDefaults.cardColors(containerColor = colors.surface),
                 shape = RoundedCornerShape(20.dp),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Vista previa", style = MaterialTheme.typography.titleMedium)
+                    Text("Esquema de bandas", style = MaterialTheme.typography.titleMedium)
                     Text(
                         if (hasSensor) {
-                            "Inclina el teléfono. Aquí se desenfoca este dibujo igual que la capa: " +
-                                "lado que se aleja blando, lado cercano nítido, y un poco de perspectiva."
+                            "Inclina el teléfono. Las franjas claras marcan qué bandas pedirían radio " +
+                                "al compositor (más claro = más blur). No es una simulación del cristal " +
+                                "ni un velo sobre un launcher falso. El efecto real solo se ve sobre " +
+                                "otras apps si el blur cruzado está encendido."
                         } else {
                             "Este aparato no expone giroscopio ni vector de rotación. El efecto quedará fijo."
                         },
@@ -200,10 +187,10 @@ fun HomeScreen(
                     } else if (!canDrawOverlays) {
                         onRequestOverlayPermission()
                     } else {
-                        showCaptureDialog = true
+                        onActivate()
                     }
                 },
-                enabled = overlayOn || canDrawOverlays,
+                enabled = overlayOn || canActivate,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
@@ -262,10 +249,10 @@ fun HomeScreen(
             }
 
             Text(
-                "Sin anuncios, sin rastreo y sin root. La captura solo vive en el teléfono mientras " +
-                    "la capa está encendida. Apps con FLAG_SECURE (banca, DRM) salen en negro. " +
-                    "Mientras inclinas ves el último fotograma limpio desenfocado; al volver de frente " +
-                    "ves la pantalla real al instante. La capa se pausa al apagar la pantalla.",
+                "Sin anuncios, sin rastreo, sin root y sin captura de pantalla. " +
+                    "El desenfoque lo hace el compositor dentro de cada banda " +
+                    "(setBackgroundBlurRadius). Si el OEM lo apaga, la capa no finge un velo. " +
+                    "Los toques atraviesan las bandas. Se pausa al apagar la pantalla.",
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
             )
@@ -278,7 +265,7 @@ fun HomeScreen(
 private fun PermissionCard(
     title: String,
     body: String,
-    action: String,
+    action: String?,
     onAction: () -> Unit,
     iconNotifications: Boolean = false,
 ) {
@@ -298,7 +285,9 @@ private fun PermissionCard(
             }
             Spacer(Modifier.height(8.dp))
             Text(body, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-            TextButton(onClick = onAction) { Text(action) }
+            if (action != null) {
+                TextButton(onClick = onAction) { Text(action) }
+            }
         }
     }
 }

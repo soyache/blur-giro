@@ -10,6 +10,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.soyache.blurgiro.data.AppSettings
 import com.soyache.blurgiro.data.BlurMode
+import com.soyache.blurgiro.effect.CrossWindowBlur
 import com.soyache.blurgiro.sensor.TiltTracker
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -26,6 +27,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var tiltY by mutableFloatStateOf(0f)
         private set
+    var crossWindowBlurEnabled by mutableStateOf(CrossWindowBlur.isEnabled(application))
+        private set
+
+    val blurApiSupported: Boolean = CrossWindowBlur.isApiSupported()
 
     private val tracker = TiltTracker(
         context = application,
@@ -35,6 +40,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             tiltY = y
         },
     )
+
+    private val stopBlurListen = CrossWindowBlur.listen(application) { enabled ->
+        crossWindowBlurEnabled = enabled
+    }
 
     val hasSensor: Boolean get() = tracker.hasSensor
 
@@ -46,6 +55,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         override fun onStop(owner: LifecycleOwner) {
             tracker.stop()
         }
+    }
+
+    fun refreshBlurState() {
+        crossWindowBlurEnabled = CrossWindowBlur.isEnabled(getApplication())
     }
 
     fun updateIntensity(value: Float) {
@@ -64,6 +77,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        stopBlurListen.invoke()
         tracker.stop()
         super.onCleared()
     }

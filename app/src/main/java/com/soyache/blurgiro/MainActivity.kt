@@ -1,10 +1,8 @@
 package com.soyache.blurgiro
 
 import android.Manifest
-import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -21,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.soyache.blurgiro.effect.CrossWindowBlur
 import com.soyache.blurgiro.overlay.OverlayService
 import com.soyache.blurgiro.ui.HomeScreen
 import com.soyache.blurgiro.ui.HomeViewModel
@@ -31,7 +30,6 @@ class MainActivity : ComponentActivity() {
     private val viewModel: HomeViewModel by viewModels()
     private var canDrawOverlays by mutableStateOf(false)
     private var notificationsGranted by mutableStateOf(true)
-    private var captureDenied by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,16 +43,6 @@ class MainActivity : ComponentActivity() {
                 ActivityResultContracts.RequestPermission(),
             ) { granted ->
                 notificationsGranted = granted
-            }
-            val captureLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.StartActivityForResult(),
-            ) { result ->
-                if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-                    captureDenied = false
-                    OverlayService.start(this, result.resultCode, result.data!!)
-                } else {
-                    captureDenied = true
-                }
             }
 
             LaunchedEffect(Unit) {
@@ -73,7 +61,8 @@ class MainActivity : ComponentActivity() {
                     overlayOn = overlayOn,
                     canDrawOverlays = canDrawOverlays,
                     notificationsGranted = notificationsGranted,
-                    captureDenied = captureDenied,
+                    blurApiSupported = viewModel.blurApiSupported,
+                    crossWindowBlurEnabled = viewModel.crossWindowBlurEnabled,
                     intensity = viewModel.intensity,
                     smoothness = viewModel.smoothness,
                     mode = viewModel.mode,
@@ -83,7 +72,7 @@ class MainActivity : ComponentActivity() {
                     onIntensity = viewModel::updateIntensity,
                     onSmoothness = viewModel::updateSmoothness,
                     onMode = viewModel::updateMode,
-                    onActivate = { requestCapture(captureLauncher::launch) },
+                    onActivate = { tryActivate() },
                     onDeactivate = { OverlayService.stop(this) },
                     onRequestOverlayPermission = { openOverlaySettings() },
                     onRequestNotifications = {
@@ -91,6 +80,7 @@ class MainActivity : ComponentActivity() {
                             permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
                     },
+                    onOpenDeveloperSettings = { openDeveloperSettings() },
                 )
             }
         }
@@ -99,6 +89,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshPermissions()
+        viewModel.refreshBlurState()
     }
 
     override fun onDestroy() {
@@ -116,17 +107,33 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun requestCapture(launch: (Intent) -> Unit) {
+    private fun tryActivate() {
         if (!Settings.canDrawOverlays(this)) {
             openOverlaySettings()
             return
         }
-        val mgr = getSystemService(MediaProjectionManager::class.java)
-        launch(mgr.createScreenCaptureIntent())
+        if (!CrossWindowBlur.isEnabled(this)) {
+            return
+        }
+        OverlayService.start(this)
     }
 
     private fun openOverlaySettings() {
         val uri = Uri.parse("package:$packageName")
         startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, uri))
+    }
+
+    private fun openDeveloperSettings() {
+        val intents = listOf(
+            Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
+            Intent(Settings.ACTION_SETTINGS),
+        )
+        for (intent in intents) {
+            val launched = runCatching {
+                startActivity(intent)
+                true
+            }.getOrDefault(false)
+            if (launched) return
+        }
     }
 }

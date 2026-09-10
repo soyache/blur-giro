@@ -7,4 +7,16 @@
         <item name="android:colorPrimary">@color/ice</item>
     </style>
 
+    <!--
+      Banda flotante: translúcida + floating. Sin esto, setBackgroundBlurRadius
+      se dibuja a pantalla completa o no se ve (AOSP Window blurs).
+    -->
+    <style name="Theme.CristalGiro.BlurStrip" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>
