@@ -7,10 +7,11 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Máscara 0..1 del cristal: 0 = nítido, 1 = máximo desenfoque / escarcha.
+ * Máscara 0..1 del cristal: 0 = nítido, 1 = máximo desenfoque / niebla.
  *
- * El foco se desplaza con la inclinación para un DOF poco profundo:
- * el lado (o las esquinas) hacia el que se inclina el teléfono se va de foco.
+ * El foco se desplaza con la inclinación (DOF poco profundo):
+ * el lado o las esquinas hacia los que se inclina el teléfono se van de foco.
+ * En reposo (plano) la máscara queda casi en cero: sin velo a pantalla completa.
  */
 object BlurMask {
 
@@ -58,8 +59,10 @@ object BlurMask {
     }
 
     fun directionalStrength(tiltX: Float, tiltY: Float): Float {
-        return hypot(tiltX, tiltY).coerceIn(0.18f, 1f)
+        return hypot(tiltX, tiltY).coerceIn(0f, 1f)
     }
+
+    fun tiltEngage(tiltMag: Float): Float = smoothstep(ENGAGE_START, ENGAGE_FULL, tiltMag)
 
     private fun corners(
         px: Float,
@@ -70,53 +73,63 @@ object BlurMask {
         ty: Float,
         tiltMag: Float,
     ): Float {
-        val focusX = -tx * 0.36f
-        val focusY = -ty * 0.36f
+        val engage = tiltEngage(tiltMag)
+        if (engage <= 0.001f) return 0f
+
+        val focusX = -tx * 0.55f
+        val focusY = -ty * 0.55f
         val dist = hypot(px - focusX, py - focusY)
-        val vignette = smoothstep(0.28f, 1.12f, dist)
+        val dof = smoothstep(0.42f, 1.28f, dist)
 
-        val cx = abs(u * 2f - 1f).let { it * it * it }
-        val cy = abs(v * 2f - 1f).let { it * it * it }
-        val corner = (cx * cy * 4.5f).coerceIn(0f, 1f)
-
+        val cx = abs(u * 2f - 1f)
+        val cy = abs(v * 2f - 1f)
+        val cornerness = (cx * cy).let { it * it }
+        val toward = max(0f, px * tx + py * ty)
         val far = if (tiltMag > 0.02f) {
             val dx = px / (hypot(px, py) + 1e-4f)
             val dy = py / (hypot(px, py) + 1e-4f)
-            max(0f, dx * (tx / tiltMag) + dy * (ty / tiltMag)) * tiltMag
+            max(0f, dx * (tx / tiltMag) + dy * (ty / tiltMag))
         } else {
             0f
         }
 
-        return (vignette * 0.62f + corner * 0.72f + far * 0.34f).coerceIn(0f, 1f)
+        return (
+            dof * 0.58f +
+                toward * 0.42f * (0.30f + 0.70f * cornerness) +
+                far * 0.22f
+            ).coerceIn(0f, 1f) * engage
     }
 
     private fun directional(px: Float, py: Float, tx: Float, ty: Float, tiltMag: Float): Float {
-        val dirX: Float
-        val dirY: Float
-        if (tiltMag < 0.04f) {
-            dirX = 0f
-            dirY = 1f
-        } else {
-            dirX = tx / tiltMag
-            dirY = ty / tiltMag
-        }
+        val engage = tiltEngage(tiltMag)
+        if (engage <= 0.001f) return 0f
+        val dirX = tx / tiltMag
+        val dirY = ty / tiltMag
         val projected = px * dirX + py * dirY
-        val band = smoothstep(-0.22f, 0.78f, projected)
-        val frame = smoothstep(0.78f, 1f, max(abs(px), abs(py)))
-        return max(band * (0.55f + 0.45f * max(tiltMag, 0.2f)), frame * 0.28f)
+        val band = smoothstep(-0.12f, 0.90f, projected)
+        val edge = smoothstep(0.55f, 1.02f, max(abs(px), abs(py)))
+        return max(band, edge * 0.12f * engage) * engage
     }
 
     private fun cornerInfluence(tiltX: Float, tiltY: Float, cornerX: Float, cornerY: Float): Float {
+        val tiltMag = hypot(tiltX, tiltY)
+        val engage = tiltEngage(tiltMag)
+        if (engage <= 0.001f) return 0f
         val alignment = (tiltX * cornerX + tiltY * cornerY) * 0.5f
-        return (0.32f + max(alignment, 0f) * 0.7f).coerceIn(0.2f, 1f)
+        return (smoothstep(0.04f, 0.88f, alignment) * engage).coerceIn(0f, 1f)
     }
 
     fun smoothstep(edge0: Float, edge1: Float, x: Float): Float {
-        val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
+        val span = edge1 - edge0
+        if (span == 0f) return if (x >= edge1) 1f else 0f
+        val t = ((x - edge0) / span).coerceIn(0f, 1f)
         return t * t * (3f - 2f * t)
     }
 
     fun mix(a: Float, b: Float, t: Float): Float = a + (b - a) * t
 
     fun clamp01(v: Float): Float = min(1f, max(0f, v))
+
+    const val ENGAGE_START = 0.06f
+    const val ENGAGE_FULL = 0.34f
 }
