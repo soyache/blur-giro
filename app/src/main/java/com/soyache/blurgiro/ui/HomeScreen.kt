@@ -1,5 +1,6 @@
 package com.soyache.blurgiro.ui
 
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.soyache.blurgiro.data.BlurMode
+import com.soyache.blurgiro.effect.OemBlurCopy
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,7 +61,6 @@ fun HomeScreen(
     onDeactivate: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
     onRequestNotifications: () -> Unit,
-    onOpenDeveloperSettings: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val canActivate = canDrawOverlays && blurApiSupported && crossWindowBlurEnabled
@@ -102,28 +103,17 @@ fun HomeScreen(
 
             if (!blurApiSupported) {
                 PermissionCard(
-                    title = "Hace falta Android 12 o superior",
-                    body = "El desenfoque de otras ventanas (Window.setBackgroundBlurRadius) solo existe " +
-                        "desde Android 12. En este aparato no hay API pública para desenfocar el launcher " +
-                        "sin capturar la pantalla, y CristalGiro se niega a grabar.",
+                    title = OemBlurCopy.apiUnsupportedTitle(),
+                    body = OemBlurCopy.apiUnsupportedBody(),
                     action = null,
                     onAction = {},
                 )
             } else if (!crossWindowBlurEnabled) {
                 PermissionCard(
-                    title = "El teléfono tiene el desenfoque entre ventanas desactivado",
-                    body = "CristalGiro usa la API pública del compositor (cross-window blur) para " +
-                        "desenfocar otras apps bajo ventanas translúcidas. Aquí " +
-                        "WindowManager.isCrossWindowBlurEnabled es falso: el sistema o el fabricante " +
-                        "no aplican blur cruzado.\n\n" +
-                        "Sin eso no podemos desenfocar el launcher ni otras apps. No vamos a pintar " +
-                        "un velo ni a pedir captura de pantalla.\n\n" +
-                        "En Pixel y AOSP a veces se enciende en Ajustes → Opciones de desarrollador → " +
-                        "Representación acelerada por hardware → Permitir desenfoques a nivel de ventana. " +
-                        "En muchas marcas (Xiaomi, Huawei, Oppo, Vivo, Samsung) no existe o no aplica " +
-                        "a overlays: CristalGiro no puede saltarse esa política.",
-                    action = "Abrir opciones de desarrollador",
-                    onAction = onOpenDeveloperSettings,
+                    title = OemBlurCopy.oemUnsupportedTitle(Build.MANUFACTURER),
+                    body = OemBlurCopy.oemUnsupportedBody(Build.MANUFACTURER, Build.VERSION.SDK_INT),
+                    action = null,
+                    onAction = {},
                 )
             }
 
@@ -251,7 +241,8 @@ fun HomeScreen(
             Text(
                 "Sin anuncios, sin rastreo, sin root y sin captura de pantalla. " +
                     "El desenfoque lo hace el compositor dentro de cada banda " +
-                    "(setBackgroundBlurRadius). Si el OEM lo apaga, la capa no finge un velo. " +
+                    "(setBackgroundBlurRadius). Si el fabricante no abrió esa API a terceros, " +
+                    "la capa no se enciende y no finge un velo. " +
                     "Los toques atraviesan las bandas. Se pausa al apagar la pantalla.",
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,

@@ -9,8 +9,11 @@ import java.util.function.Consumer
 /**
  * Consulta si el compositor permite desenfoque entre ventanas (Android 12+).
  *
- * Si es falso, CristalGiro **no** activa un velo pintado ni captura de pantalla:
- * el OEM o el runtime tienen el blur cruzado apagado.
+ * Si es falso, el fabricante no habilitó blur de ventana para terceros
+ * (`ro.surface_flinger.supports_background_blur` no está en 1, o el runtime
+ * lo apagó). CristalGiro **no** activa un velo pintado ni captura de pantalla,
+ * y no manda a Opciones de desarrollador: si el interruptor no existe, no hay
+ * nada que encender.
  */
 object CrossWindowBlur {
 
