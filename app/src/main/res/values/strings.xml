@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CristalGiro</string>
+    <string name="notification_channel_name">Cristal activo</string>
+    <string name="notification_channel_desc">Aviso silencioso mientras la capa de cristal está encendida. No rastrea nada.</string>
+    <string name="notification_title">CristalGiro activo</string>
+    <string name="notification_text">Capa de cristal sobre otras apps. Los toques siguen pasando.</string>
+    <string name="notification_stop">Desactivar</string>
+</resources>
