@@ -21,7 +21,9 @@ class BlurMaskTest {
     @Test
     fun yawRightBlursLeftSide() {
         val left = BlurMask.sample(0.05f, 0.5f, 0.9f, 0f, BlurMode.DIRECTIONAL)
+        val mid = BlurMask.sample(0.50f, 0.5f, 0.9f, 0f, BlurMode.DIRECTIONAL)
         val right = BlurMask.sample(0.95f, 0.5f, 0.9f, 0f, BlurMode.DIRECTIONAL)
+        assertTrue("izquierda=$left medio=$mid derecha=$right", left > mid && mid > right)
         assertTrue("izquierda=$left derecha=$right (giro X a la derecha → lejos es la izquierda)", left > right + 0.25f)
     }
 

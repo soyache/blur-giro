@@ -11,9 +11,9 @@ import com.soyache.blurgiro.effect.StripBlur
 import com.soyache.blurgiro.effect.StripSpec
 
 /**
- * Varias bandas overlay no táctiles. Cada una pide background blur acotado.
- * De frente (o si el compositor apaga el blur cruzado) se ocultan: el teléfono
- * se ve normal. Sin captura, sin velo pintado.
+ * Bandas overlay a pantalla completa (ancho × alto). Cada una pide background
+ * blur acotado, con radio en degradado. De frente (o si el compositor apaga
+ * el blur cruzado) se ocultan: el teléfono se ve normal. Sin captura, sin velo.
  */
 class OverlayController(context: Context) {
 

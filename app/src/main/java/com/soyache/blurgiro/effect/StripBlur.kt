@@ -1,7 +1,6 @@
 package com.soyache.blurgiro.effect
 
 import com.soyache.blurgiro.data.BlurMode
-import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /**
@@ -19,27 +18,24 @@ data class StripSpec(
 }
 
 /**
- * Plan de bandas: varias ventanas finas con radios distintos.
+ * Plan de bandas a **pantalla completa**: recorren todo el ancho y todo el alto.
  *
- * Giro X a la derecha (tiltX > 0) → la izquierda se aleja → radios altos a la izquierda.
- * De frente → todos los radios a 0.
+ * Giro X a la derecha (tiltX > 0) → radio alto a la izquierda, degradado suave
+ * hasta ~0 a la derecha. De frente → todos los radios a 0.
  *
- * El inset geométrico es un sesgo mínimo del layout (el cristal «gira» un poco).
- * No captura píxeles ni pinta niebla.
+ * No captura píxeles ni pinta niebla. Sin insets: de borde a borde.
  */
 object StripBlur {
 
-    const val WINDOW_COUNT = 8
+    const val WINDOW_COUNT = 16
     const val MAX_RADIUS_PX = 64
-    const val MIN_VISIBLE_RADIUS = 3
+    const val MIN_VISIBLE_RADIUS = 2
 
-    private const val DIRECTIONAL_COLS = 8
+    private const val DIRECTIONAL_COLS = 16
     private const val DIRECTIONAL_ROWS = 1
-    private const val CORNER_COLS = 4
+    private const val CORNER_COLS = 8
     private const val CORNER_ROWS = 2
-
-    /** Receso máximo del lado lejano (~1.6 % del ancho). */
-    const val MAX_RECESS = 0.016f
+    private const val SEAM_OVERLAP_PX = 3
 
     fun gridSize(mode: BlurMode): Pair<Int, Int> = when (mode) {
         BlurMode.DIRECTIONAL -> DIRECTIONAL_COLS to DIRECTIONAL_ROWS
@@ -83,30 +79,24 @@ object StripBlur {
         val h = screenH.coerceAtLeast(1)
         val (cols, rows) = gridSize(mode)
         val radii = radii(tiltX, tiltY, intensity, mode)
-        val (insetL, insetT, insetR, insetB) = insets(w, h, tiltX, tiltY, intensity)
-        val innerW = (w - insetL - insetR).coerceAtLeast(cols)
-        val innerH = (h - insetT - insetB).coerceAtLeast(rows)
 
         val specs = ArrayList<StripSpec>(WINDOW_COUNT)
         var i = 0
         for (row in 0 until rows) {
             for (col in 0 until cols) {
-                val x0 = insetL + innerW * col / cols
-                val x1 = insetL + innerW * (col + 1) / cols + if (col < cols - 1) 1 else 0
-                val y0 = insetT + innerH * row / rows
-                val y1 = insetT + innerH * (row + 1) / rows + if (row < rows - 1) 1 else 0
-                val radius = radii.getOrElse(i) { 0 }
-                specs += if (radius <= 0) {
-                    StripSpec(0, 0, 1, 1, 0)
-                } else {
-                    StripSpec(
-                        x = x0,
-                        y = y0,
-                        width = (x1 - x0).coerceAtLeast(1),
-                        height = (y1 - y0).coerceAtLeast(1),
-                        radiusPx = radius,
-                    )
-                }
+                val x0 = (w * col / cols - if (col > 0) SEAM_OVERLAP_PX else 0).coerceAtLeast(0)
+                val x1 = (w * (col + 1) / cols + if (col < cols - 1) SEAM_OVERLAP_PX else 0)
+                    .coerceAtMost(w)
+                val y0 = (h * row / rows - if (row > 0) SEAM_OVERLAP_PX else 0).coerceAtLeast(0)
+                val y1 = (h * (row + 1) / rows + if (row < rows - 1) SEAM_OVERLAP_PX else 0)
+                    .coerceAtMost(h)
+                specs += StripSpec(
+                    x = x0,
+                    y = y0,
+                    width = (x1 - x0).coerceAtLeast(1),
+                    height = (y1 - y0).coerceAtLeast(1),
+                    radiusPx = radii.getOrElse(i) { 0 },
+                )
                 i++
             }
         }
@@ -118,26 +108,19 @@ object StripBlur {
 
     fun anyVisible(plan: List<StripSpec>): Boolean = plan.any { it.visible }
 
-    /**
-     * Insets del lado que se aleja: [left, top, right, bottom].
-     * tiltX > 0 (derecha más cerca) → inset izquierdo.
-     */
-    fun insets(
-        screenW: Int,
-        screenH: Int,
-        tiltX: Float,
-        tiltY: Float,
-        intensity: Float,
-    ): IntArray {
-        val tx = tiltX.coerceIn(-1f, 1f)
-        val ty = (tiltY * BlurMask.Y_WEIGHT).coerceIn(-1f, 1f)
-        val engage = BlurMask.tiltEngage(hypot(tx, ty)) * intensity.coerceIn(0f, 1f)
-        val recessX = screenW * MAX_RECESS * engage
-        val recessY = screenH * MAX_RECESS * engage * 0.7f
-        val insetL = if (tx > 0f) (recessX * tx).roundToInt() else 0
-        val insetR = if (tx < 0f) (recessX * -tx).roundToInt() else 0
-        val insetT = if (ty > 0f) (recessY * ty).roundToInt() else 0
-        val insetB = if (ty < 0f) (recessY * -ty).roundToInt() else 0
-        return intArrayOf(insetL, insetT, insetR, insetB)
+    /** Unión de las celdas del plan (debe ser la pantalla entera). */
+    fun coverage(plan: List<StripSpec>): IntArray {
+        if (plan.isEmpty()) return intArrayOf(0, 0, 0, 0)
+        var minX = Int.MAX_VALUE
+        var minY = Int.MAX_VALUE
+        var maxX = Int.MIN_VALUE
+        var maxY = Int.MIN_VALUE
+        for (spec in plan) {
+            minX = minOf(minX, spec.x)
+            minY = minOf(minY, spec.y)
+            maxX = maxOf(maxX, spec.x + spec.width)
+            maxY = maxOf(maxY, spec.y + spec.height)
+        }
+        return intArrayOf(minX, minY, maxX, maxY)
     }
 }

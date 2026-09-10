@@ -92,9 +92,9 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                "De frente el teléfono se ve normal: sin blur. Si lo giras en X (izquierda o derecha), " +
-                    "el lado que se aleja se desenfoca un poco — los iconos se quedan, pero blandos — " +
-                    "porque el compositor desenfoca lo que hay detrás de unas bandas flotantes. " +
+                "El cristal cubre todo el teléfono, de borde a borde. De frente se ve normal: sin blur. " +
+                    "Si lo giras en X, el desenfoque es gradual en todo el ancho: fuerte en el lado que " +
+                    "se aleja, y se va aclarando hasta el lado cercano. Los iconos se quedan, blandos. " +
                     "Al volver de frente se quitan las bandas. No grabamos la pantalla.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.onSurfaceVariant,
@@ -157,10 +157,10 @@ fun HomeScreen(
                     Text("Esquema de bandas", style = MaterialTheme.typography.titleMedium)
                     Text(
                         if (hasSensor) {
-                            "Inclina el teléfono. Las franjas claras marcan qué bandas pedirían radio " +
-                                "al compositor (más claro = más blur). No es una simulación del cristal " +
-                                "ni un velo sobre un launcher falso. El efecto real solo se ve sobre " +
-                                "otras apps si el blur cruzado está encendido."
+                            "Inclina el teléfono. Las franjas cubren toda la pantalla: más claro = " +
+                                "más radio, degradado de un lado al otro. No es una simulación del " +
+                                "cristal ni un velo. El efecto real solo se ve sobre otras apps si " +
+                                "el blur cruzado está encendido."
                         } else {
                             "Este aparato no expone giroscopio ni vector de rotación. El efecto quedará fijo."
                         },

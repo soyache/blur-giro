@@ -8,10 +8,10 @@ Sin anuncios, sin rastreo, **sin root** y **sin captura de pantalla**.
 
 ## Qué hace
 
-- Varias bandas flotantes (`TYPE_APPLICATION_OVERLAY`), translúcidas y **no táctiles** (`FLAG_NOT_TOUCHABLE`): las demás apps se siguen usando.
-- Cada banda pide al compositor un *background blur* acotado a sus bounds (`Window.setBackgroundBlurRadius`, Android 12+). El drawable de fondo es casi invisible: solo define el recorte. No se usa `FLAG_BLUR_BEHIND` / `setBlurBehindRadius` (eso desenfoca **toda** la pantalla).
-- El giroscopio reparte el radio: lado lejano más blur, lado cercano ~0. De frente, radio 0 y las bandas se ocultan: **el teléfono se ve completamente normal**.
-- Hay un sesgo geométrico mínimo del layout (el cristal «gira» un poco). No se capturan píxeles para deformar la UI.
+- Dieciséis bandas flotantes (`TYPE_APPLICATION_OVERLAY`) que **recubren todo el teléfono** (ancho × alto, de borde a borde), translúcidas y **no táctiles** (`FLAG_NOT_TOUCHABLE`).
+- Cada banda pide al compositor un *background blur* acotado a sus bounds (`Window.setBackgroundBlurRadius`, Android 12+). El drawable de fondo es casi invisible: solo define el recorte. No se usa `FLAG_BLUR_BEHIND` / `setBlurBehindRadius` (eso desenfoca **toda** la pantalla con un solo radio).
+- El giroscopio reparte el radio en **degradado**: lado lejano más blur, y se va suavizando hasta el lado cercano (~0). No es un parche en una esquina. De frente, radio 0 y las bandas se ocultan: **el teléfono se ve completamente normal**.
+- No se capturan píxeles para deformar la UI.
 - Servicio en primer plano con notificación permanente y silenciosa.
 - Los sensores se pausan al apagar la pantalla.
 

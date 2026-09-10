@@ -86,7 +86,7 @@ object BlurMask {
         val focusX = tx * 0.55f
         val focusY = ty * 0.55f
         val dist = hypot(px - focusX, py - focusY)
-        val dof = smoothstep(0.38f, 1.22f, dist)
+        val dof = smoothstep(0.10f, 1.58f, dist)
         return (dof * engage).coerceIn(0f, 1f)
     }
 
@@ -95,9 +95,9 @@ object BlurMask {
         if (engage <= 0.001f) return 0f
         val dirX = tx / tiltMag
         val dirY = ty / tiltMag
-        val towardCloser = px * dirX + py * dirY
-        val towardFar = -towardCloser
-        val band = smoothstep(-0.18f, 0.88f, towardFar)
+        val towardFar = -(px * dirX + py * dirY)
+        // Degradado a todo el ancho: 1 en el borde lejano, 0 en el cercano.
+        val band = smoothstep(-1f, 1f, towardFar)
         return (band * engage).coerceIn(0f, 1f)
     }
 
