@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature
@@ -36,10 +37,10 @@
         <service
             android:name=".overlay.OverlayService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="mediaProjection|specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Capa de cristal inclinable sobre otras apps. No captura la pantalla ni lee el contenido de otras aplicaciones." />
+                android:value="Capa de cristal inclinable. Captura la pantalla solo con permiso explícito para desenfocar el contenido real; no se guarda ni se envía." />
         </service>
     </application>
 </manifest>

@@ -7,11 +7,14 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Máscara 0..1 del cristal: 0 = nítido, 1 = máximo desenfoque / niebla.
+ * Máscara 0..1 del cristal: 0 = nítido, 1 = máximo desenfoque del *contenido*.
  *
- * El foco se desplaza con la inclinación (DOF poco profundo):
- * el lado o las esquinas hacia los que se inclina el teléfono se van de foco.
- * En reposo (plano) la máscara queda casi en cero: sin velo a pantalla completa.
+ * El lado que se **aleja** (el opuesto al giro) se va de foco.
+ * Héctor: giro en X hacia la derecha → la izquierda se pone un poco blur;
+ * de frente se quita el blur de todos los lugares.
+ *
+ * tiltX > 0 = derecha más cerca; el far side es la izquierda.
+ * La Y pesa menos ([PerspectiveWarp.Y_WEIGHT]) para priorizar el eje X.
  */
 object BlurMask {
 
@@ -26,18 +29,18 @@ object BlurMask {
         val px = u * 2f - 1f
         val py = v * 2f - 1f
         val tx = tiltX.coerceIn(-1f, 1f)
-        val ty = tiltY.coerceIn(-1f, 1f)
+        val ty = (tiltY * PerspectiveWarp.Y_WEIGHT).coerceIn(-1f, 1f)
         val tiltMag = hypot(tx, ty)
 
         return when (mode) {
-            BlurMode.CORNERS -> corners(px, py, u, v, tx, ty, tiltMag)
+            BlurMode.CORNERS -> corners(px, py, tx, ty, tiltMag)
             BlurMode.DIRECTIONAL -> directional(px, py, tx, ty, tiltMag)
         }.coerceIn(0f, 1f)
     }
 
     fun cornerStrengths(tiltX: Float, tiltY: Float): CornerStrengths {
         val tx = tiltX.coerceIn(-1f, 1f)
-        val ty = tiltY.coerceIn(-1f, 1f)
+        val ty = (tiltY * PerspectiveWarp.Y_WEIGHT).coerceIn(-1f, 1f)
         return CornerStrengths(
             topLeft = cornerInfluence(tx, ty, -1f, -1f),
             topRight = cornerInfluence(tx, ty, 1f, -1f),
@@ -47,28 +50,32 @@ object BlurMask {
     }
 
     /**
-     * Lado dominante para el modo direccional.
+     * Lado que se aleja (el que debe desenfocarse).
      * 0 = izquierda, 1 = arriba, 2 = derecha, 3 = abajo.
      */
-    fun dominantSide(tiltX: Float, tiltY: Float): Int {
-        return if (abs(tiltX) >= abs(tiltY)) {
-            if (tiltX >= 0f) 2 else 0
+    fun farSide(tiltX: Float, tiltY: Float): Int {
+        val ty = tiltY * PerspectiveWarp.Y_WEIGHT
+        return if (abs(tiltX) >= abs(ty)) {
+            if (tiltX >= 0f) 0 else 2
         } else {
-            if (tiltY >= 0f) 3 else 1
+            if (ty >= 0f) 1 else 3
         }
     }
 
     fun directionalStrength(tiltX: Float, tiltY: Float): Float {
-        return hypot(tiltX, tiltY).coerceIn(0f, 1f)
+        return hypot(tiltX, tiltY * PerspectiveWarp.Y_WEIGHT).coerceIn(0f, 1f)
     }
 
     fun tiltEngage(tiltMag: Float): Float = smoothstep(ENGAGE_START, ENGAGE_FULL, tiltMag)
 
+    fun effectAmount(tiltX: Float, tiltY: Float, intensity: Float): Float {
+        val mag = hypot(tiltX.coerceIn(-1f, 1f), tiltY.coerceIn(-1f, 1f) * PerspectiveWarp.Y_WEIGHT)
+        return (tiltEngage(mag) * intensity.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+    }
+
     private fun corners(
         px: Float,
         py: Float,
-        u: Float,
-        v: Float,
         tx: Float,
         ty: Float,
         tiltMag: Float,
@@ -76,28 +83,11 @@ object BlurMask {
         val engage = tiltEngage(tiltMag)
         if (engage <= 0.001f) return 0f
 
-        val focusX = -tx * 0.55f
-        val focusY = -ty * 0.55f
+        val focusX = tx * 0.55f
+        val focusY = ty * 0.55f
         val dist = hypot(px - focusX, py - focusY)
-        val dof = smoothstep(0.42f, 1.28f, dist)
-
-        val cx = abs(u * 2f - 1f)
-        val cy = abs(v * 2f - 1f)
-        val cornerness = (cx * cy).let { it * it }
-        val toward = max(0f, px * tx + py * ty)
-        val far = if (tiltMag > 0.02f) {
-            val dx = px / (hypot(px, py) + 1e-4f)
-            val dy = py / (hypot(px, py) + 1e-4f)
-            max(0f, dx * (tx / tiltMag) + dy * (ty / tiltMag))
-        } else {
-            0f
-        }
-
-        return (
-            dof * 0.58f +
-                toward * 0.42f * (0.30f + 0.70f * cornerness) +
-                far * 0.22f
-            ).coerceIn(0f, 1f) * engage
+        val dof = smoothstep(0.38f, 1.22f, dist)
+        return (dof * engage).coerceIn(0f, 1f)
     }
 
     private fun directional(px: Float, py: Float, tx: Float, ty: Float, tiltMag: Float): Float {
@@ -105,17 +95,17 @@ object BlurMask {
         if (engage <= 0.001f) return 0f
         val dirX = tx / tiltMag
         val dirY = ty / tiltMag
-        val projected = px * dirX + py * dirY
-        val band = smoothstep(-0.12f, 0.90f, projected)
-        val edge = smoothstep(0.55f, 1.02f, max(abs(px), abs(py)))
-        return max(band, edge * 0.12f * engage) * engage
+        val towardCloser = px * dirX + py * dirY
+        val towardFar = -towardCloser
+        val band = smoothstep(-0.18f, 0.88f, towardFar)
+        return (band * engage).coerceIn(0f, 1f)
     }
 
     private fun cornerInfluence(tiltX: Float, tiltY: Float, cornerX: Float, cornerY: Float): Float {
         val tiltMag = hypot(tiltX, tiltY)
         val engage = tiltEngage(tiltMag)
         if (engage <= 0.001f) return 0f
-        val alignment = (tiltX * cornerX + tiltY * cornerY) * 0.5f
+        val alignment = (-tiltX * cornerX + -tiltY * cornerY) * 0.5f
         return (smoothstep(0.04f, 0.88f, alignment) * engage).coerceIn(0f, 1f)
     }
 

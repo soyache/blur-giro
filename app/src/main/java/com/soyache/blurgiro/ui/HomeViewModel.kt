@@ -10,7 +10,6 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.soyache.blurgiro.data.AppSettings
 import com.soyache.blurgiro.data.BlurMode
-import com.soyache.blurgiro.effect.CrossWindowBlur
 import com.soyache.blurgiro.sensor.TiltTracker
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -27,12 +26,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var tiltY by mutableFloatStateOf(0f)
         private set
-    var compositorBlurLive by mutableStateOf(CrossWindowBlur.isEnabled(application))
-        private set
-
-    private var stopBlurListen: (() -> Unit)? = CrossWindowBlur.listen(application) { enabled ->
-        compositorBlurLive = enabled
-    }
 
     private val tracker = TiltTracker(
         context = application,
@@ -71,8 +64,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
-        stopBlurListen?.invoke()
-        stopBlurListen = null
         tracker.stop()
         super.onCleared()
     }

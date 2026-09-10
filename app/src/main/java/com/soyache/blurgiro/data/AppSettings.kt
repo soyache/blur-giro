@@ -17,7 +17,7 @@ class AppSettings private constructor(context: Context) {
         set(value) = prefs.edit().putFloat(KEY_SMOOTHNESS, value.coerceIn(0f, 1f)).apply()
 
     var mode: BlurMode
-        get() = BlurMode.fromOrdinal(prefs.getInt(KEY_MODE, BlurMode.CORNERS.ordinal))
+        get() = BlurMode.fromOrdinal(prefs.getInt(KEY_MODE, BlurMode.DIRECTIONAL.ordinal))
         set(value) = prefs.edit().putInt(KEY_MODE, value.ordinal).apply()
 
     var overlayRequested: Boolean
@@ -39,7 +39,7 @@ class AppSettings private constructor(context: Context) {
         const val KEY_MODE = "mode"
         const val KEY_OVERLAY = "overlay_requested"
 
-        const val DEFAULT_INTENSITY = 0.62f
+        const val DEFAULT_INTENSITY = 0.50f
         const val DEFAULT_SMOOTHNESS = 0.72f
 
         @Volatile

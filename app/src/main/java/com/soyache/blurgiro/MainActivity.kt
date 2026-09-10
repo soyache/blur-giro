@@ -1,8 +1,10 @@
 package com.soyache.blurgiro
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -29,6 +31,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel: HomeViewModel by viewModels()
     private var canDrawOverlays by mutableStateOf(false)
     private var notificationsGranted by mutableStateOf(true)
+    private var captureDenied by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +45,16 @@ class MainActivity : ComponentActivity() {
                 ActivityResultContracts.RequestPermission(),
             ) { granted ->
                 notificationsGranted = granted
+            }
+            val captureLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult(),
+            ) { result ->
+                if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+                    captureDenied = false
+                    OverlayService.start(this, result.resultCode, result.data!!)
+                } else {
+                    captureDenied = true
+                }
             }
 
             LaunchedEffect(Unit) {
@@ -60,17 +73,18 @@ class MainActivity : ComponentActivity() {
                     overlayOn = overlayOn,
                     canDrawOverlays = canDrawOverlays,
                     notificationsGranted = notificationsGranted,
+                    captureDenied = captureDenied,
                     intensity = viewModel.intensity,
                     smoothness = viewModel.smoothness,
                     mode = viewModel.mode,
                     tiltX = viewModel.tiltX,
                     tiltY = viewModel.tiltY,
                     hasSensor = viewModel.hasSensor,
-                    compositorBlurLive = viewModel.compositorBlurLive,
                     onIntensity = viewModel::updateIntensity,
                     onSmoothness = viewModel::updateSmoothness,
                     onMode = viewModel::updateMode,
-                    onToggle = { enable -> toggleOverlay(enable) },
+                    onActivate = { requestCapture(captureLauncher::launch) },
+                    onDeactivate = { OverlayService.stop(this) },
                     onRequestOverlayPermission = { openOverlaySettings() },
                     onRequestNotifications = {
                         if (Build.VERSION.SDK_INT >= 33) {
@@ -85,12 +99,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshPermissions()
-        if (viewModel.settings.overlayRequested &&
-            Settings.canDrawOverlays(this) &&
-            !OverlayService.running.value
-        ) {
-            OverlayService.start(this)
-        }
     }
 
     override fun onDestroy() {
@@ -108,16 +116,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun toggleOverlay(enable: Boolean) {
-        if (enable) {
-            if (!Settings.canDrawOverlays(this)) {
-                openOverlaySettings()
-                return
-            }
-            OverlayService.start(this)
-        } else {
-            OverlayService.stop(this)
+    private fun requestCapture(launch: (Intent) -> Unit) {
+        if (!Settings.canDrawOverlays(this)) {
+            openOverlaySettings()
+            return
         }
+        val mgr = getSystemService(MediaProjectionManager::class.java)
+        launch(mgr.createScreenCaptureIntent())
     }
 
     private fun openOverlaySettings() {
