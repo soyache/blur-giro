@@ -3,6 +3,8 @@ package com.soyache.blurgiro.effect
 import android.content.Context
 import android.os.Build
 import android.view.WindowManager
+import androidx.core.content.ContextCompat
+import java.util.function.Consumer
 
 /**
  * Consulta si el compositor permite desenfoque entre ventanas (Android 12+).
@@ -26,22 +28,22 @@ object CrossWindowBlur {
      * @return función para dejar de escuchar. El listener recibe el valor actual al registrarse.
      */
     fun listen(context: Context, onChange: (Boolean) -> Unit): () -> Unit {
-        if (!isApiSupported()) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             onChange(false)
             return {}
         }
         val app = context.applicationContext
         val wm = app.getSystemService(WindowManager::class.java)
-        val consumer = java.util.function.Consumer<Boolean> { enabled -> onChange(enabled) }
-        return runCatching {
-            wm.addCrossWindowBlurEnabledListener(app.mainExecutor, consumer)
-            {
+        val consumer = Consumer<Boolean> { enabled -> onChange(enabled) }
+        return try {
+            wm.addCrossWindowBlurEnabledListener(ContextCompat.getMainExecutor(app), consumer)
+            ({
                 runCatching { wm.removeCrossWindowBlurEnabledListener(consumer) }
                 Unit
-            }
-        }.getOrElse {
+            })
+        } catch (_: Throwable) {
             onChange(false)
-            {}
+            ({})
         }
     }
 }
