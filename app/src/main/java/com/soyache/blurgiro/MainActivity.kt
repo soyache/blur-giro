@@ -66,9 +66,9 @@ class MainActivity : ComponentActivity() {
                     tiltX = viewModel.tiltX,
                     tiltY = viewModel.tiltY,
                     hasSensor = viewModel.hasSensor,
-                    onIntensity = viewModel::setIntensity,
-                    onSmoothness = viewModel::setSmoothness,
-                    onMode = viewModel::setMode,
+                    onIntensity = viewModel::updateIntensity,
+                    onSmoothness = viewModel::updateSmoothness,
+                    onMode = viewModel::updateMode,
                     onToggle = { enable -> toggleOverlay(enable) },
                     onRequestOverlayPermission = { openOverlaySettings() },
                     onRequestNotifications = {

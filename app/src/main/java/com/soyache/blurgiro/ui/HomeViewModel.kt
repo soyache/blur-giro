@@ -48,17 +48,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setIntensity(value: Float) {
+    fun updateIntensity(value: Float) {
         intensity = value
         settings.intensity = value
     }
 
-    fun setSmoothness(value: Float) {
+    fun updateSmoothness(value: Float) {
         smoothness = value
         settings.smoothness = value
     }
 
-    fun setMode(value: BlurMode) {
+    fun updateMode(value: BlurMode) {
         mode = value
         settings.mode = value
     }
