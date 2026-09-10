@@ -50,6 +50,7 @@ fun HomeScreen(
     tiltX: Float,
     tiltY: Float,
     hasSensor: Boolean,
+    compositorBlurLive: Boolean,
     onIntensity: (Float) -> Unit,
     onSmoothness: (Float) -> Unit,
     onMode: (BlurMode) -> Unit,
@@ -86,7 +87,7 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                "Cristal grueso que se corre de foco al inclinar el teléfono: las esquinas o un lado se desenfocan; el lado opuesto sigue nítido. No es un filtro dentro de una sola pantalla: es una capa sobre otras apps.",
+                "Al inclinar el teléfono, el borde o las esquinas hacia los que giras se van de foco; el centro y el lado opuesto siguen más nítidos. En reposo el efecto se apaga: no hay un velo blanco ni un brillo a pantalla completa.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.onSurfaceVariant,
             )
@@ -118,7 +119,7 @@ fun HomeScreen(
                     Text("Vista previa", style = MaterialTheme.typography.titleMedium)
                     Text(
                         if (hasSensor) {
-                            "Inclina el teléfono. El dibujo de abajo usa el mismo cristal que la capa del sistema."
+                            "Inclina el teléfono. Aquí sí podemos desenfocar este dibujo (es nuestro). Sobre otras apps el desenfoque real lo hace el compositor si el fabricante lo permite; si no, verás una niebla mate en el borde, no un brillo."
                         } else {
                             "Este aparato no expone giroscopio ni vector de rotación. El efecto quedará fijo."
                         },
@@ -130,10 +131,20 @@ fun HomeScreen(
                         tiltY = tiltY,
                         intensity = intensity,
                         mode = mode,
+                        compositorBlurLive = compositorBlurLive,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(220.dp)
                             .clip(RoundedCornerShape(16.dp)),
+                    )
+                    Text(
+                        if (compositorBlurLive) {
+                            "Este aparato permite desenfoque entre ventanas: la capa pedirá blur real en el borde."
+                        } else {
+                            "Este aparato no está aplicando desenfoque entre ventanas (muy habitual en overlays). La capa usa niebla mate direccional, sin velo claro."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
                     )
                 }
             }
@@ -199,7 +210,7 @@ fun HomeScreen(
             }
 
             Text(
-                "Sin anuncios, sin rastreo y sin root. Algunos fabricantes recortan las ventanas emergentes o el desenfoque del compositor: si el cristal se ve débil, revisa el permiso y el administrador de inicio. La capa se pausa al apagar la pantalla.",
+                "Sin anuncios, sin rastreo y sin root. El desenfoque óptico de otras apps solo existe si el compositor del fabricante lo habilita (a veces en Opciones de desarrollador → «Permitir desenfoques a nivel de ventana»). Si no, CristalGiro no pinta un brillo: usa una niebla oscura que se corre con el giro. La capa se pausa al apagar la pantalla.",
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
             )

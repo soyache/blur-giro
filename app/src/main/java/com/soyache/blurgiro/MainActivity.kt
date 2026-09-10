@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity() {
                     tiltX = viewModel.tiltX,
                     tiltY = viewModel.tiltY,
                     hasSensor = viewModel.hasSensor,
+                    compositorBlurLive = viewModel.compositorBlurLive,
                     onIntensity = viewModel::updateIntensity,
                     onSmoothness = viewModel::updateSmoothness,
                     onMode = viewModel::updateMode,

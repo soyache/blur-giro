@@ -1,18 +1,30 @@
 package com.soyache.blurgiro.ui
 
+import android.graphics.Bitmap
+import android.os.Build
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.viewinterop.AndroidView
 import com.soyache.blurgiro.data.BlurMode
+import com.soyache.blurgiro.effect.BlurMask
 import com.soyache.blurgiro.overlay.BlurOverlayView
 
 @Composable
@@ -21,20 +33,61 @@ fun TiltPreview(
     tiltY: Float,
     intensity: Float,
     mode: BlurMode,
+    compositorBlurLive: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier) {
         PreviewWallpaper(Modifier.fillMaxSize())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val mask = remember(tiltX, tiltY, intensity, mode) {
+                maskBitmap(48, 80, tiltX, tiltY, mode, intensity)
+            }
+            PreviewWallpaper(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .blur((10 + intensity * 18).dp)
+                    .drawWithContent {
+                        drawContent()
+                        drawImage(
+                            image = mask.asImageBitmap(),
+                            dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    },
+            )
+        }
         AndroidView(
             modifier = Modifier.fillMaxSize(),
-            factory = { context ->
-                BlurOverlayView(context)
-            },
+            factory = { context -> BlurOverlayView(context) },
             update = { view ->
-                view.setEffect(tiltX, tiltY, intensity, mode)
+                view.setEffect(tiltX, tiltY, intensity, mode, compositorBlurLive)
             },
         )
     }
+}
+
+private fun maskBitmap(
+    width: Int,
+    height: Int,
+    tiltX: Float,
+    tiltY: Float,
+    mode: BlurMode,
+    intensity: Float,
+): Bitmap {
+    val pixels = IntArray(width * height)
+    val maxX = (width - 1).coerceAtLeast(1).toFloat()
+    val maxY = (height - 1).coerceAtLeast(1).toFloat()
+    for (y in 0 until height) {
+        val v = y / maxY
+        for (x in 0 until width) {
+            val u = x / maxX
+            val m = (BlurMask.sample(u, v, tiltX, tiltY, mode) * intensity).coerceIn(0f, 1f)
+            val a = (m * 255f).toInt().coerceIn(0, 255)
+            pixels[y * width + x] = (a shl 24) or 0x00FFFFFF
+        }
+    }
+    return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
 }
 
 @Composable
@@ -42,7 +95,7 @@ private fun PreviewWallpaper(modifier: Modifier = Modifier) {
     Canvas(modifier) {
         drawRect(
             brush = Brush.verticalGradient(
-                listOf(Color(0xFF1B3A5F), Color(0xFF6BA3C7), Color(0xFFE8C39E), Color(0xFF7A9E4F)),
+                listOf(Color(0xFF12141A), Color(0xFF1B3A5F), Color(0xFF3D6B8A), Color(0xFF1A1C22)),
             ),
         )
         val cols = 4

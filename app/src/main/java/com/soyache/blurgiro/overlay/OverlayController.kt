@@ -8,12 +8,13 @@ import android.view.WindowManager
 import com.soyache.blurgiro.data.AppSettings
 import com.soyache.blurgiro.data.BlurMode
 import com.soyache.blurgiro.effect.BlurMask
-import kotlin.math.abs
+import com.soyache.blurgiro.effect.CrossWindowBlur
 import kotlin.math.roundToInt
 
 /**
- * Capa de paso (no táctil) a pantalla completa + manchas de blur en
- * esquinas o en un lado. El blur real del compositor es opcional (OEM).
+ * Overlay no táctil a pantalla completa (niebla mate) + parches que piden
+ * *background blur* al compositor. No usa FLAG_BLUR_BEHIND: ese API desenfoca
+ * toda la pantalla, no solo el borde.
  */
 class OverlayController(context: Context) {
 
@@ -22,28 +23,34 @@ class OverlayController(context: Context) {
     private val settings = AppSettings.get(appContext)
 
     private var frostView: BlurOverlayView? = null
-    private val regions = Array(4) { RegionSlot() }
+    private val patches = Array(PATCH_COUNT) { FrostPatchWindow(appContext, windowManager) }
     private var attached = false
+    private var compositorBlurLive = false
+    private var stopBlurListen: (() -> Unit)? = null
 
     private var tiltX = 0f
     private var tiltY = 0f
 
     fun show() {
         if (attached) return
+        compositorBlurLive = CrossWindowBlur.isEnabled(appContext)
+        stopBlurListen = CrossWindowBlur.listen(appContext) { enabled ->
+            compositorBlurLive = enabled
+            if (attached) pushEffect(forceRegions = true)
+        }
         addFrost()
-        addRegions()
+        patches.forEach { it.ensureShown() }
         attached = true
         pushEffect(forceRegions = true)
     }
 
     fun hide() {
         if (!attached) return
+        stopBlurListen?.invoke()
+        stopBlurListen = null
         frostView?.let { runCatching { windowManager.removeViewImmediate(it) } }
         frostView = null
-        regions.forEach { slot ->
-            slot.view?.let { runCatching { windowManager.removeViewImmediate(it) } }
-            slot.reset()
-        }
+        patches.forEach { it.hide() }
         attached = false
     }
 
@@ -54,39 +61,27 @@ class OverlayController(context: Context) {
     }
 
     fun onSettingsChanged() {
-        frostView?.refreshFrostBlur(settings.intensity)
         if (attached) pushEffect(forceRegions = true)
     }
 
     private fun pushEffect(forceRegions: Boolean) {
         val intensity = settings.intensity
         val mode = settings.mode
-        frostView?.setEffect(tiltX, tiltY, intensity, mode)
-        updateRegions(intensity, mode, forceRegions)
+        frostView?.setEffect(tiltX, tiltY, intensity, mode, compositorBlurLive)
+        updatePatches(intensity, mode, forceRegions)
     }
 
     private fun addFrost() {
         val view = BlurOverlayView(appContext)
-        val params = baseParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
-        // La capa de escarcha no usa blur-behind: el centro debe seguir nítido.
+        val params = baseParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+        )
         windowManager.addView(view, params)
         frostView = view
     }
 
-    private fun addRegions() {
-        repeat(4) { index ->
-            runCatching {
-                val view = BlurRegionView(appContext)
-                val params = baseParams(1, 1)
-                applyBlurBehind(params, 12)
-                windowManager.addView(view, params)
-                regions[index].view = view
-                regions[index].params = params
-            }
-        }
-    }
-
-    private fun updateRegions(intensity: Float, mode: BlurMode, force: Boolean) {
+    private fun updatePatches(intensity: Float, mode: BlurMode, force: Boolean) {
         val metrics = appContext.resources.displayMetrics
         val screenW = metrics.widthPixels
         val screenH = metrics.heightPixels
@@ -105,108 +100,81 @@ class OverlayController(context: Context) {
                 intArrayOf(0, 1),
                 intArrayOf(1, 1),
             )
-            for (i in 0..3) {
+            for (i in 0 until PATCH_COUNT) {
                 val strength = strengths[i] * intensity
-                val w = (screenW * (0.30f + 0.18f * strength)).roundToInt().coerceAtLeast(48)
-                val h = (screenH * (0.24f + 0.16f * strength)).roundToInt().coerceAtLeast(48)
+                val w = (screenW * (0.28f + 0.20f * strength)).roundToInt().coerceAtLeast(48)
+                val h = (screenH * (0.22f + 0.18f * strength)).roundToInt().coerceAtLeast(48)
                 val x = if (positions[i][0] == 0) 0 else screenW - w
                 val y = if (positions[i][1] == 0) 0 else screenH - h
-                val blur = (10 + 42 * strength).roundToInt()
-                layoutRegion(i, x, y, w, h, strength, blur, visible = strength > 0.08f, force = force)
+                val blur = (18 + 70 * strength).roundToInt()
+                patches[i].update(
+                    targetX = x,
+                    targetY = y,
+                    targetW = w,
+                    targetH = h,
+                    blurRadius = blur,
+                    strength = strength,
+                    visible = strength > 0.10f,
+                    blurEnabled = compositorBlurLive,
+                    force = force,
+                )
             }
         } else {
             val side = BlurMask.dominantSide(tiltX, tiltY)
             val strength = BlurMask.directionalStrength(tiltX, tiltY) * intensity
-            val thick = (0.22f + 0.28f * strength)
-            for (i in 0..3) {
-                if (i != 0) {
-                    layoutRegion(i, 0, 0, 1, 1, 0f, 0, visible = false, force = force)
+            val visible = strength > 0.10f
+            val depths = floatArrayOf(0.38f, 0.26f, 0.16f)
+            val blurScales = floatArrayOf(0.55f, 0.78f, 1f)
+            for (i in 0 until PATCH_COUNT) {
+                if (i >= depths.size) {
+                    patches[i].update(0, 0, 1, 1, 0, 0f, visible = false, blurEnabled = false, force = force)
                     continue
                 }
+                val thick = depths[i] * (0.72f + 0.28f * strength)
                 val w: Int
                 val h: Int
                 val x: Int
                 val y: Int
                 when (side) {
-                    0 -> { // izquierda
-                        w = (screenW * thick).roundToInt()
+                    0 -> {
+                        w = (screenW * thick).roundToInt().coerceAtLeast(24)
                         h = screenH
                         x = 0
                         y = 0
                     }
-                    2 -> { // derecha
-                        w = (screenW * thick).roundToInt()
+                    2 -> {
+                        w = (screenW * thick).roundToInt().coerceAtLeast(24)
                         h = screenH
                         x = screenW - w
                         y = 0
                     }
-                    1 -> { // arriba
+                    1 -> {
                         w = screenW
-                        h = (screenH * thick).roundToInt()
+                        h = (screenH * thick).roundToInt().coerceAtLeast(24)
                         x = 0
                         y = 0
                     }
-                    else -> { // abajo
+                    else -> {
                         w = screenW
-                        h = (screenH * thick).roundToInt()
+                        h = (screenH * thick).roundToInt().coerceAtLeast(24)
                         x = 0
                         y = screenH - h
                     }
                 }
-                val blur = (12 + 48 * strength).roundToInt()
-                layoutRegion(0, x, y, w, h, strength, blur, visible = true, force = force)
+                val blur = (16 + 86 * strength * blurScales[i]).roundToInt()
+                patches[i].update(
+                    targetX = x,
+                    targetY = y,
+                    targetW = w,
+                    targetH = h,
+                    blurRadius = blur,
+                    strength = strength * blurScales[i],
+                    visible = visible,
+                    blurEnabled = compositorBlurLive,
+                    force = force,
+                )
             }
         }
-    }
-
-    private fun layoutRegion(
-        index: Int,
-        x: Int,
-        y: Int,
-        w: Int,
-        h: Int,
-        strength: Float,
-        blurRadius: Int,
-        visible: Boolean,
-        force: Boolean,
-    ) {
-        val slot = regions[index]
-        val view = slot.view ?: return
-        val params = slot.params ?: return
-        val targetW = if (visible) w else 1
-        val targetH = if (visible) h else 1
-        val targetX = if (visible) x else 0
-        val targetY = if (visible) y else 0
-        val changed =
-            force ||
-                abs(slot.x - targetX) > 4 ||
-                abs(slot.y - targetY) > 4 ||
-                abs(slot.w - targetW) > 6 ||
-                abs(slot.h - targetH) > 6 ||
-                abs(slot.strength - strength) > 0.03f ||
-                slot.blur != blurRadius ||
-                slot.visible != visible
-
-        if (!changed) {
-            view.setStrength(strength)
-            return
-        }
-
-        view.setStrength(strength)
-        view.visibility = if (visible) android.view.View.VISIBLE else android.view.View.GONE
-        params.width = targetW
-        params.height = targetH
-        params.x = targetX
-        params.y = targetY
-        applyBlurBehind(params, if (visible) blurRadius else 0)
-        runCatching { windowManager.updateViewLayout(view, params) }
-        slot.x = targetX
-        slot.y = targetY
-        slot.w = targetW
-        slot.h = targetH
-        slot.strength = strength
-        slot.blur = blurRadius
-        slot.visible = visible
     }
 
     private fun baseParams(width: Int, height: Int): WindowManager.LayoutParams {
@@ -234,33 +202,7 @@ class OverlayController(context: Context) {
         }
     }
 
-    private fun applyBlurBehind(params: WindowManager.LayoutParams, radius: Int) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
-        params.flags = params.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
-        params.setBlurBehindRadius(radius.coerceIn(0, 80))
-    }
-
-    private class RegionSlot {
-        var view: BlurRegionView? = null
-        var params: WindowManager.LayoutParams? = null
-        var x = 0
-        var y = 0
-        var w = 0
-        var h = 0
-        var strength = -1f
-        var blur = -1
-        var visible = true
-
-        fun reset() {
-            view = null
-            params = null
-            x = 0
-            y = 0
-            w = 0
-            h = 0
-            strength = -1f
-            blur = -1
-            visible = true
-        }
+    companion object {
+        private const val PATCH_COUNT = 4
     }
 }
