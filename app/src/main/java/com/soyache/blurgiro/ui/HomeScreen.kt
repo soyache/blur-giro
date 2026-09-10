@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.BlurOn
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,6 +32,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,21 +49,53 @@ fun HomeScreen(
     overlayOn: Boolean,
     canDrawOverlays: Boolean,
     notificationsGranted: Boolean,
+    captureDenied: Boolean,
     intensity: Float,
     smoothness: Float,
     mode: BlurMode,
     tiltX: Float,
     tiltY: Float,
     hasSensor: Boolean,
-    compositorBlurLive: Boolean,
     onIntensity: (Float) -> Unit,
     onSmoothness: (Float) -> Unit,
     onMode: (BlurMode) -> Unit,
-    onToggle: (Boolean) -> Unit,
+    onActivate: () -> Unit,
+    onDeactivate: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
     onRequestNotifications: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    var showCaptureDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showCaptureDialog) {
+        AlertDialog(
+            onDismissRequest = { showCaptureDialog = false },
+            title = { Text("Permiso para capturar la pantalla") },
+            text = {
+                Text(
+                    "Para que los iconos se vean desenfocados de verdad (como cuando giras el teléfono " +
+                        "hacia un lado), CristalGiro necesita ver lo que hay en pantalla. Android te va a " +
+                        "pedir permiso de captura.\n\n" +
+                        "No se guarda nada, no se envía a internet y no se activa a tus espaldas: solo " +
+                        "mientras la capa está encendida y tú lo acabas de conceder. Los toques siguen " +
+                        "pasando a las otras apps.\n\n" +
+                        "Si lo niegas, no activamos la capa. Un velo pintado no se parece a lo que pediste.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showCaptureDialog = false
+                        onActivate()
+                    },
+                ) { Text("Continuar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCaptureDialog = false }) { Text("Cancelar") }
+            },
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -87,7 +124,9 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                "Al inclinar el teléfono, el borde o las esquinas hacia los que giras se van de foco; el centro y el lado opuesto siguen más nítidos. En reposo el efecto se apaga: no hay un velo blanco ni un brillo a pantalla completa.",
+                "De frente el teléfono se ve normal: sin blur. Si lo giras en X (izquierda o derecha), " +
+                    "el lado que se aleja se desenfoca un poco — los iconos se quedan, pero blandos — " +
+                    "y la pantalla parece que también gira. Al volver de frente se quita el blur de todos los lugares.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.onSurfaceVariant,
             )
@@ -95,7 +134,9 @@ fun HomeScreen(
             if (!canDrawOverlays) {
                 PermissionCard(
                     title = "Permiso para mostrar sobre otras apps",
-                    body = "Android llama a este permiso SYSTEM_ALERT_WINDOW («mostrar sobre otras apps»). CristalGiro lo usa solo para dibujar una capa transparente. No captura la pantalla, no lee lo que hay debajo y no bloquea toques: las demás apps siguen usándose con normalidad. Puedes quitarlo cuando quieras en Ajustes.",
+                    body = "Android llama a este permiso SYSTEM_ALERT_WINDOW («mostrar sobre otras apps»). " +
+                        "CristalGiro lo usa solo para dibujar la capa encima. No bloquea toques: las demás " +
+                        "apps se siguen usando. Puedes quitarlo cuando quieras en Ajustes.",
                     action = "Conceder permiso",
                     onAction = onRequestOverlayPermission,
                 )
@@ -104,10 +145,22 @@ fun HomeScreen(
             if (!notificationsGranted) {
                 PermissionCard(
                     title = "Aviso silencioso",
-                    body = "Mientras el cristal está activo, Android exige un servicio en primer plano con una notificación permanente y silenciosa. No envía alertas ni rastrea nada. Sin este permiso, el sistema puede ocultar ese aviso.",
+                    body = "Mientras el cristal está activo, Android exige un servicio en primer plano con " +
+                        "una notificación permanente y silenciosa. No envía alertas ni rastrea nada.",
                     action = "Permitir notificación",
                     onAction = onRequestNotifications,
                     iconNotifications = true,
+                )
+            }
+
+            if (captureDenied && !overlayOn) {
+                PermissionCard(
+                    title = "Hace falta el permiso de captura",
+                    body = "Sin captura no podemos desenfocar los iconos de verdad. Un tinte o una niebla " +
+                        "no sirven: se vería un velo, no el contenido fuera de foco. Vuelve a pulsar Activar " +
+                        "y acepta el diálogo del sistema.",
+                    action = "Reintentar",
+                    onAction = { showCaptureDialog = true },
                 )
             }
 
@@ -119,7 +172,8 @@ fun HomeScreen(
                     Text("Vista previa", style = MaterialTheme.typography.titleMedium)
                     Text(
                         if (hasSensor) {
-                            "Inclina el teléfono. Aquí sí podemos desenfocar este dibujo (es nuestro). Sobre otras apps el desenfoque real lo hace el compositor si el fabricante lo permite; si no, verás una niebla mate en el borde, no un brillo."
+                            "Inclina el teléfono. Aquí se desenfoca este dibujo igual que la capa: " +
+                                "lado que se aleja blando, lado cercano nítido, y un poco de perspectiva."
                         } else {
                             "Este aparato no expone giroscopio ni vector de rotación. El efecto quedará fijo."
                         },
@@ -131,26 +185,24 @@ fun HomeScreen(
                         tiltY = tiltY,
                         intensity = intensity,
                         mode = mode,
-                        compositorBlurLive = compositorBlurLive,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(220.dp)
                             .clip(RoundedCornerShape(16.dp)),
                     )
-                    Text(
-                        if (compositorBlurLive) {
-                            "Este aparato permite desenfoque entre ventanas: la capa pedirá blur real en el borde."
-                        } else {
-                            "Este aparato no está aplicando desenfoque entre ventanas (muy habitual en overlays). La capa usa niebla mate direccional, sin velo claro."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceVariant,
-                    )
                 }
             }
 
             Button(
-                onClick = { onToggle(!overlayOn) },
+                onClick = {
+                    if (overlayOn) {
+                        onDeactivate()
+                    } else if (!canDrawOverlays) {
+                        onRequestOverlayPermission()
+                    } else {
+                        showCaptureDialog = true
+                    }
+                },
                 enabled = overlayOn || canDrawOverlays,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -194,23 +246,26 @@ fun HomeScreen(
                     Text("Modo", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
+                            selected = mode == BlurMode.DIRECTIONAL,
+                            onClick = { onMode(BlurMode.DIRECTIONAL) },
+                            label = { Text("Lado (eje X)") },
+                            leadingIcon = { Icon(Icons.Outlined.Layers, contentDescription = null) },
+                        )
+                        FilterChip(
                             selected = mode == BlurMode.CORNERS,
                             onClick = { onMode(BlurMode.CORNERS) },
                             label = { Text("Solo esquinas") },
                             leadingIcon = { Icon(Icons.Outlined.BlurOn, contentDescription = null) },
-                        )
-                        FilterChip(
-                            selected = mode == BlurMode.DIRECTIONAL,
-                            onClick = { onMode(BlurMode.DIRECTIONAL) },
-                            label = { Text("Lado direccional") },
-                            leadingIcon = { Icon(Icons.Outlined.Layers, contentDescription = null) },
                         )
                     }
                 }
             }
 
             Text(
-                "Sin anuncios, sin rastreo y sin root. El desenfoque óptico de otras apps solo existe si el compositor del fabricante lo habilita (a veces en Opciones de desarrollador → «Permitir desenfoques a nivel de ventana»). Si no, CristalGiro no pinta un brillo: usa una niebla oscura que se corre con el giro. La capa se pausa al apagar la pantalla.",
+                "Sin anuncios, sin rastreo y sin root. La captura solo vive en el teléfono mientras " +
+                    "la capa está encendida. Apps con FLAG_SECURE (banca, DRM) salen en negro. " +
+                    "Mientras inclinas ves el último fotograma limpio desenfocado; al volver de frente " +
+                    "ves la pantalla real al instante. La capa se pausa al apagar la pantalla.",
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
             )

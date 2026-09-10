@@ -1,5 +1,6 @@
 package com.soyache.blurgiro.overlay
 
+import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -11,6 +12,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -31,6 +35,7 @@ class OverlayService : Service() {
     private var overlay: OverlayController? = null
     private var tiltTracker: TiltTracker? = null
     private var receiversRegistered = false
+    private var projection: MediaProjection? = null
 
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == AppSettings.KEY_INTENSITY ||
@@ -70,12 +75,36 @@ class OverlayService : Service() {
         }
 
         startInForeground()
+
+        val token = readProjection(intent)
+        if (token == null) {
+            settings.overlayRequested = false
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        if (projection == null) {
+            val mgr = getSystemService(MediaProjectionManager::class.java)
+            projection = runCatching { mgr.getMediaProjection(token.first, token.second) }.getOrNull()
+        }
+        val live = projection
+        if (live == null) {
+            settings.overlayRequested = false
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         settings.overlayRequested = true
-        ensureOverlay()
+        ensureOverlay(live)
         registerAux()
         startSensorsIfInteractive()
         _running.value = true
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        overlay?.onDisplayChanged()
     }
 
     override fun onDestroy() {
@@ -83,6 +112,7 @@ class OverlayService : Service() {
         tiltTracker = null
         overlay?.hide()
         overlay = null
+        projection = null
         settings.unregister(prefsListener)
         if (receiversRegistered) {
             unregisterReceiver(screenReceiver)
@@ -94,9 +124,27 @@ class OverlayService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun ensureOverlay() {
+    private fun readProjection(intent: Intent?): Pair<Int, Intent>? {
+        if (intent == null) return null
+        val code = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
+        val data = if (Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(EXTRA_RESULT_DATA)
+        }
+        if (code != Activity.RESULT_OK || data == null) return null
+        return code to data
+    }
+
+    private fun ensureOverlay(projection: MediaProjection) {
         if (overlay == null) {
-            overlay = OverlayController(this).also { it.show() }
+            overlay = OverlayController(this).also {
+                it.show(projection) {
+                    settings.overlayRequested = false
+                    stopSelf()
+                }
+            }
         }
         if (tiltTracker == null) {
             tiltTracker = TiltTracker(
@@ -132,12 +180,20 @@ class OverlayService : Service() {
 
     private fun startInForeground() {
         val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        if (Build.VERSION.SDK_INT >= 34) {
             ServiceCompat.startForeground(
                 this,
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                    or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            )
+        } else if (Build.VERSION.SDK_INT >= 29) {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION,
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)
@@ -191,13 +247,18 @@ class OverlayService : Service() {
         const val ACTION_STOP = "com.soyache.blurgiro.STOP_OVERLAY"
         const val CHANNEL_ID = "cristalgiro_overlay"
         const val NOTIFICATION_ID = 17
+        const val EXTRA_RESULT_CODE = "result_code"
+        const val EXTRA_RESULT_DATA = "result_data"
 
         private val _running = MutableStateFlow(false)
         val running: StateFlow<Boolean> = _running.asStateFlow()
 
-        fun start(context: Context) {
+        fun start(context: Context, resultCode: Int, data: Intent) {
             val app = context.applicationContext
-            val intent = Intent(app, OverlayService::class.java)
+            val intent = Intent(app, OverlayService::class.java).apply {
+                putExtra(EXTRA_RESULT_CODE, resultCode)
+                putExtra(EXTRA_RESULT_DATA, data)
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 app.startForegroundService(intent)
             } else {

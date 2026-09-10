@@ -15,36 +15,40 @@ class BlurMaskTest {
         assertTrue("centro en reposo=$center", center < 0.04f)
         assertTrue("esquina en reposo=$corner", corner < 0.04f)
         assertTrue("borde direccional en reposo=$dirEdge", dirEdge < 0.04f)
+        assertEquals(0f, BlurMask.effectAmount(0f, 0f, 1f), 0.001f)
     }
 
     @Test
-    fun cornersDefocusTiltedCornerAndKeepOppositeSharp() {
-        val far = BlurMask.sample(0.96f, 0.04f, 1f, -1f, BlurMode.CORNERS)
-        val near = BlurMask.sample(0.04f, 0.96f, 1f, -1f, BlurMode.CORNERS)
-        val center = BlurMask.sample(0.5f, 0.5f, 1f, -1f, BlurMode.CORNERS)
-        assertTrue("lejos=$far cerca=$near", far > near + 0.18f)
-        assertTrue("lejos=$far centro=$center", far > center)
+    fun yawRightBlursLeftSide() {
+        val left = BlurMask.sample(0.05f, 0.5f, 0.9f, 0f, BlurMode.DIRECTIONAL)
+        val right = BlurMask.sample(0.95f, 0.5f, 0.9f, 0f, BlurMode.DIRECTIONAL)
+        assertTrue("izquierda=$left derecha=$right (giro X a la derecha → lejos es la izquierda)", left > right + 0.25f)
     }
 
     @Test
-    fun directionalBlursTiltedSide() {
-        val right = BlurMask.sample(0.95f, 0.5f, 1f, 0f, BlurMode.DIRECTIONAL)
-        val left = BlurMask.sample(0.05f, 0.5f, 1f, 0f, BlurMode.DIRECTIONAL)
-        assertTrue("derecha=$right izquierda=$left", right > left + 0.25f)
+    fun yawLeftBlursRightSide() {
+        val left = BlurMask.sample(0.05f, 0.5f, -0.9f, 0f, BlurMode.DIRECTIONAL)
+        val right = BlurMask.sample(0.95f, 0.5f, -0.9f, 0f, BlurMode.DIRECTIONAL)
+        assertTrue("izquierda=$left derecha=$right", right > left + 0.25f)
     }
 
     @Test
-    fun dominantSideFollowsTilt() {
-        assertEquals(2, BlurMask.dominantSide(0.8f, 0.1f))
-        assertEquals(0, BlurMask.dominantSide(-0.8f, 0.1f))
-        assertEquals(3, BlurMask.dominantSide(0.1f, 0.8f))
-        assertEquals(1, BlurMask.dominantSide(0.1f, -0.8f))
+    fun cornersDefocusFarCorner() {
+        val far = BlurMask.sample(0.04f, 0.96f, 1f, -1f, BlurMode.CORNERS)
+        val near = BlurMask.sample(0.96f, 0.04f, 1f, -1f, BlurMode.CORNERS)
+        assertTrue("lejos=$far cerca=$near", far > near + 0.12f)
+    }
+
+    @Test
+    fun farSideFollowsYaw() {
+        assertEquals(0, BlurMask.farSide(0.8f, 0.1f))
+        assertEquals(2, BlurMask.farSide(-0.8f, 0.1f))
     }
 
     @Test
     fun farCornerGetsMoreStrength() {
         val corners = BlurMask.cornerStrengths(1f, -1f)
-        assertTrue(corners.topRight > corners.bottomLeft)
+        assertTrue(corners.bottomLeft > corners.topRight)
         val rest = BlurMask.cornerStrengths(0f, 0f)
         assertTrue(rest.topLeft < 0.05f)
         assertTrue(rest.topRight < 0.05f)

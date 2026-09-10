@@ -1,10 +1,10 @@
 package com.soyache.blurgiro.data
 
 enum class BlurMode {
-    /** Desenfoque denso en las esquinas; el centro permanece más nítido. */
+    /** Desenfoque en las esquinas que se alejan; el centro permanece más nítido. */
     CORNERS,
 
-    /** Un lado (el de la inclinación) se va de foco; el opuesto se mantiene claro. */
+    /** El lado que se aleja (eje X) se va de foco; el cercano se mantiene claro. */
     DIRECTIONAL,
     ;
 

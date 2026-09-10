@@ -1,37 +1,50 @@
 # CristalGiro
 
-App Android (Kotlin) que pone **todo el teléfono** bajo un cristal grueso tipo Duo: desenfoque suave en esquinas o en un lado, que se mueve con el giroscopio. No es un filtro dentro de una sola pantalla: es una capa del sistema (overlay) que deja pasar los toques.
+App Android (Kotlin) que pone **todo el teléfono** bajo un cristal tipo Duo: de frente se ve normal; al girar en X el lado que se aleja se desenfoca un poco (los iconos se quedan, blandos) y la capa hace un warp de perspectiva suave.
 
-Paquete: `com.soyache.blurgiro` · versión `0.1.1` (versionCode 2).
+Paquete: `com.soyache.blurgiro` · versión `0.1.2` (versionCode 3).
 
 Sin anuncios, sin rastreo y **sin root**.
 
 ## Qué hace
 
 - Capa a pantalla completa, transparente y **no táctil** (`FLAG_NOT_TOUCHABLE`): las demás apps se siguen usando.
-- El desenfoque **no es uniforme**. Al inclinar el aparato, un borde o las esquinas se van de foco y el lado opuesto permanece más nítido (profundidad de campo / cristal grueso).
-- En reposo (teléfono plano) el efecto se apaga: **no hay un velo blanco ni un brillo** a pantalla completa.
-- Dos modos: **solo esquinas** y **lado direccional**.
-- Intensidad y suavidad del seguimiento configurables.
-- Servicio en primer plano con notificación permanente y silenciosa mientras está activo.
+- **De frente / plano:** identidad. Cero blur, cero warp. Se ve el teléfono normal.
+- **Giro en X** (izquierda–derecha): el lado que se alejó recibe un desenfoque suave del *contenido real*; el lado cercano sigue legible. La imagen también se achica un poco en el lado lejano (parece que el cristal gira).
+- Un poco de Y se admite, con menos peso. Prioridad al eje X, como en la foto de referencia.
+- Intensidad «un poco»: no es un lavado.
+- Servicio en primer plano con notificación permanente y silenciosa.
 - Los sensores se pausan al apagar la pantalla.
 
-La capa combina:
+## Por qué 0.1.0 y 0.1.1 no coincidían con la foto
 
-1. Parches en esquinas o bandas laterales que piden *background blur* al compositor (`Window.setBackgroundBlurRadius`, Android 12+) **dentro de esos recortes**. No se usa `FLAG_BLUR_BEHIND`: ese API desenfoca **toda** la pantalla y destrozaría el centro nítido.
-2. Un sombreador (AGSL en Android 13+, degradados en versiones anteriores) con **niebla mate oscura** y grano, solo en la dirección de la inclinación. Es el fallback cuando el OEM no desenfoca detrás de un overlay.
+Un overlay de app (`TYPE_APPLICATION_OVERLAY`) **casi nunca** puede pedirle al compositor que desenfogue los píxeles de otras apps. `Window.setBackgroundBlurRadius` / *cross-window blur* o no entra, o desenfoca toda la pantalla.
 
-**No captura la pantalla** y no lee el contenido de otras apps (no hay `MediaProjection`). Si el compositor no ofrece desenfoque cruzado, verás la niebla mate direccional — no un resplandor.
+0.1.0 pintó un velo claro (brillo). 0.1.1 pintó niebla mate oscura. En ambos casos los iconos no se desenfocaban: se tapaban. La foto de Héctor es **defocus real** (manchas de color blandas, WhatsApp/Gmail/ChatGPT siguen reconociéndose al otro lado). Eso no se puede fingir con tinte.
 
-## Qué fallaba en 0.1.0
+## Cómo se hace ahora (0.1.2)
 
-En un teléfono real el overlay se veía como «un brillo, todo raro». Causas:
+Si el compositor no puede desenfocar otras apps bajo un overlay —el caso normal en stock Android—, CristalGiro usa **MediaProjection con tu permiso explícito**:
 
-- El fallback pintaba escarcha **cian/blanca**, highlights especulares y un `RenderEffect` que solo desenfocaba esa pintura (bloom).
-- Las manchas de esquina tenían alpha alto y color claro. En reposo seguían visibles.
-- `FLAG_BLUR_BEHIND` casi nunca entra en `TYPE_APPLICATION_OVERLAY`; y si entra, desenfoca la pantalla entera.
+1. Tú pulsas **Activar**.
+2. La app explica en español qué va a pasar.
+3. Android muestra el diálogo del sistema de captura de pantalla. **No hay captura silenciosa.**
+4. Mientras la capa está encendida, se toma la pantalla a baja resolución.
+5. De frente no se dibuja nada (ves la pantalla real).
+6. Al inclinar, se aplica un blur direccional (pirámide nítida / media / fuerte) + un trapecio suave, y eso se pinta en el overlay.
+7. Para no desenfocar el desenfoque, mientras el efecto está visible se deja de aceptar frames nuevos. Al volver de frente se refresca.
 
-0.1.1 quita el velo claro, apaga el efecto en reposo y pide backdrop blur recortado cuando el sistema lo permite.
+No se guarda el vídeo. No se sube a internet. Al desactivar se corta la proyección.
+
+### Compromisos de este camino
+
+- Android te muestra el icono / aviso de «grabando pantalla» (lo exige el sistema).
+- Mientras inclinas ves el **último fotograma limpio** procesado. Si cambias de app inclinado, endereza un momento para refrescar.
+- Apps `FLAG_SECURE` (banca, DRM, Netflix, etc.) salen en negro en la captura.
+- Algunos OEM recortan MediaProjection o matan el servicio con el ahorro de batería.
+- Gasta un poco más de batería que un overlay vacío.
+
+No hay fallback de niebla ni de brillo: si no concedes la captura, la capa no se enciende.
 
 ## Compilar
 
@@ -51,7 +64,7 @@ En Windows (PowerShell), separa órdenes con `;`:
 
 ```powershell
 $env:ANDROID_HOME = "C:\Users\TU_USUARIO\AppData\Local\Android\Sdk"
-Set-Content -Path local.properties -Value "sdk.dir=$env:ANDROID_HOME"
+Set-Content -Path local.properties -Value "sdk.dir=$ANDROID_HOME"
 .\gradlew.bat assembleDebug
 ```
 
@@ -61,34 +74,47 @@ Instalar en un teléfono con depuración USB:
 ./gradlew installDebug
 ```
 
-## Permiso de superposición
+## Cómo activarlo en el teléfono
 
-Android llama al permiso `SYSTEM_ALERT_WINDOW` («mostrar sobre otras apps»). CristalGiro lo pide de forma explícita:
+1. Instala el APK (depuración USB o sideload).
+2. Abre CristalGiro.
+3. Concede **mostrar sobre otras apps** (`SYSTEM_ALERT_WINDOW`) si te lo pide.
+4. En Android 13+ acepta el aviso silencioso de la notificación del servicio.
+5. Pulsa **Activar**. Lee el texto: la app necesita ver la pantalla para desenfocar los iconos de verdad.
+6. En el diálogo de Android, acepta la captura (a veces dice «iniciar ahora» / «una app quiere grabar»).
+7. Sal a la pantalla de inicio. De frente no cambia nada. Gira el teléfono en X hacia la derecha: la **izquierda** se pone un poco blanda. Hacia la izquierda: al revés. Al volver de frente se quita.
 
-- Sirve **solo** para dibujar la capa de cristal encima de lo que haya en pantalla.
-- No da acceso al contenido de otras apps, no hace capturas y no intercepta toques.
-- Puedes revocarlo en **Ajustes → Aplicaciones → CristalGiro → Mostrar encima de otras aplicaciones** (el nombre exacto cambia según el fabricante).
+Revocar:
 
-Sin ese permiso la app no puede activar la capa. El botón **Activar** te lleva a la pantalla del sistema si falta.
+- **Desactivar** en la app o en la notificación.
+- Quitar superposición: **Ajustes → Aplicaciones → CristalGiro → Mostrar encima de otras aplicaciones**.
+- La captura se corta al desactivar; no queda un permiso permanente de grabación (el sistema la vuelve a pedir la próxima vez).
 
-En Android 13+ también se pide el permiso de notificaciones para el aviso silencioso del servicio. No se usa para marketing.
+## Permisos
+
+| Permiso | Para qué |
+| --- | --- |
+| `SYSTEM_ALERT_WINDOW` | Dibujar la capa encima. No intercepta toques. |
+| Captura de pantalla (`MediaProjection`) | Ver los píxeles de debajo **solo** para el efecto. Diálogo del sistema, cada vez que activas. |
+| Notificación (Android 13+) | Aviso silencioso del servicio. No es marketing. |
+| Servicio en primer plano `mediaProjection` + `specialUse` | Exigencia de Android 14+ para mantener la captura y la capa. |
 
 ## Límites de Android y de los fabricantes (OEM)
 
-Esto **no requiere root**, y por eso depende de lo que Android y cada marca dejen hacer a una app normal:
+- **Sin root.** No se puede leer el framebuffer de otras apps sin captura o sin APIs de compositor que los OEM suelen negar a overlays.
+- **Pixel / AOSP:** el diálogo de MediaProjection es el estándar. A veces hay un interruptor de desenfoque entre ventanas en opciones de desarrollador; CristalGiro **ya no depende** de él.
+- **Xiaomi / HyperOS, Huawei, Oppo, Vivo, Samsung:** pueden pedir permisos extra de «mostrar sobre otras apps», «inicio en segundo plano» o limitar la grabación de pantalla. Si la capa no aparece o la captura se corta, excluye CristalGiro del ahorro de batería.
+- **Android 11 e inferior:** MediaProjection existe; el look es el mismo. No hay blur cruzado útil para overlays.
+- **Rotación / multi-ventana:** la captura se recrea; puede haber un frame en negro un instante.
+- Si el sistema te quita la proyección (el aviso de grabar), la capa se apaga. Vuelve a pulsar Activar.
 
-- **Desenfoque real del fondo** (Android 12+): hace falta que el compositor tenga *cross-window blur* activo (`WindowManager.isCrossWindowBlurEnabled`). En Pixel/AOSP a veces se enciende en **Opciones de desarrollador → Representación acelerada por hardware → Permitir desenfoques a nivel de ventana**.
-- **`TYPE_APPLICATION_OVERLAY`**: muchas capas de fabricante (Xiaomi / HyperOS, Huawei, Oppo, Vivo, Samsung, etc.) no aplican backdrop blur a overlays de apps. En ese caso **no hay forma pública de desenfocar el wallpaper u otras apps sin capturar la pantalla**, que CristalGiro no hace.
-- **Android 11 e inferior**: no existe la API de blur cruzado. Solo la niebla mate direccional.
-- **Ahorro de batería** agresivo puede detener el servicio: excluye CristalGiro de las restricciones de inicio automático si quieres que siga activo.
-- Algunos equipos limitan cuántas overlays se pueden crear a la vez; los parches se omiten si el sistema los rechaza y queda la niebla.
-
-CristalGiro no elude esas políticas y no usa root ni captura de pantalla.
+CristalGiro no elude esas políticas.
 
 ## Privacidad
 
 - Sin red, sin anuncios, sin analítica.
-- Solo guarda en el teléfono intensidad, suavidad, modo y si pediste activar la capa.
+- La captura vive en memoria mientras el servicio corre. No se escribe a disco ni se envía.
+- Solo se guardan en el teléfono intensidad, suavidad, modo y si pediste activar la capa.
 - No se incluyen secretos ni claves en el repositorio.
 
 ## Licencia de uso
