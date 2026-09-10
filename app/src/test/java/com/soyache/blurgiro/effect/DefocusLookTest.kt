@@ -4,9 +4,11 @@ import com.soyache.blurgiro.data.BlurMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.io.File
-import javax.imageio.ImageIO
+import java.io.FileOutputStream
+import java.util.zip.CRC32
+import java.util.zip.Deflater
 import kotlin.math.abs
 
 class DefocusLookTest {
@@ -115,8 +117,65 @@ class DefocusLookTest {
     }
 
     private fun writePng(file: File, pixels: IntArray, width: Int, height: Int) {
-        val img = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
-        img.setRGB(0, 0, width, height, pixels, 0, width)
-        ImageIO.write(img, "png", file)
+        val raw = ByteArray((width * 4 + 1) * height)
+        var i = 0
+        for (y in 0 until height) {
+            raw[i++] = 0
+            val row = y * width
+            for (x in 0 until width) {
+                val p = pixels[row + x]
+                raw[i++] = ((p shr 16) and 0xff).toByte()
+                raw[i++] = ((p shr 8) and 0xff).toByte()
+                raw[i++] = (p and 0xff).toByte()
+                raw[i++] = ((p ushr 24) and 0xff).toByte()
+            }
+        }
+        val deflater = Deflater(Deflater.BEST_SPEED)
+        deflater.setInput(raw)
+        deflater.finish()
+        val zipped = ByteArrayOutputStream()
+        val buf = ByteArray(4096)
+        while (!deflater.finished()) {
+            val n = deflater.deflate(buf)
+            if (n > 0) zipped.write(buf, 0, n)
+        }
+        deflater.end()
+        FileOutputStream(file).use { out ->
+            out.write(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))
+            writeChunk(out, "IHDR", ihdr(width, height))
+            writeChunk(out, "IDAT", zipped.toByteArray())
+            writeChunk(out, "IEND", ByteArray(0))
+        }
+    }
+
+    private fun ihdr(width: Int, height: Int): ByteArray {
+        val b = ByteArray(13)
+        putInt(b, 0, width)
+        putInt(b, 4, height)
+        b[8] = 8
+        b[9] = 6
+        return b
+    }
+
+    private fun writeChunk(out: FileOutputStream, type: String, data: ByteArray) {
+        val typeBytes = type.toByteArray(Charsets.US_ASCII)
+        val len = ByteArray(4)
+        putInt(len, 0, data.size)
+        out.write(len)
+        out.write(typeBytes)
+        out.write(data)
+        val crc = CRC32()
+        crc.update(typeBytes)
+        crc.update(data)
+        val tail = ByteArray(4)
+        putInt(tail, 0, crc.value.toInt())
+        out.write(tail)
+    }
+
+    private fun putInt(dest: ByteArray, offset: Int, value: Int) {
+        dest[offset] = ((value ushr 24) and 0xff).toByte()
+        dest[offset + 1] = ((value ushr 16) and 0xff).toByte()
+        dest[offset + 2] = ((value ushr 8) and 0xff).toByte()
+        dest[offset + 3] = (value and 0xff).toByte()
     }
 }
