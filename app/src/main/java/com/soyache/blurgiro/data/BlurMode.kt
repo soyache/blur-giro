@@ -10,6 +10,6 @@ enum class BlurMode {
 
     companion object {
         fun fromOrdinal(value: Int): BlurMode =
-            entries.getOrElse(value) { CORNERS }
+            entries.getOrElse(value) { DIRECTIONAL }
     }
 }

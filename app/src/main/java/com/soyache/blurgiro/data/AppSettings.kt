@@ -20,9 +20,9 @@ class AppSettings private constructor(context: Context) {
         get() = BlurMode.fromOrdinal(prefs.getInt(KEY_MODE, BlurMode.DIRECTIONAL.ordinal))
         set(value) = prefs.edit().putInt(KEY_MODE, value.ordinal).apply()
 
-    var overlayRequested: Boolean
-        get() = prefs.getBoolean(KEY_OVERLAY, false)
-        set(value) = prefs.edit().putBoolean(KEY_OVERLAY, value).apply()
+    var laterHomeHint: Boolean
+        get() = prefs.getBoolean(KEY_LATER_HOME, false)
+        set(value) = prefs.edit().putBoolean(KEY_LATER_HOME, value).apply()
 
     fun register(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
         prefs.registerOnSharedPreferenceChangeListener(listener)
@@ -37,9 +37,10 @@ class AppSettings private constructor(context: Context) {
         const val KEY_INTENSITY = "intensity"
         const val KEY_SMOOTHNESS = "smoothness"
         const val KEY_MODE = "mode"
-        const val KEY_OVERLAY = "overlay_requested"
+        const val KEY_LATER_HOME = "later_home_hint"
 
-        const val DEFAULT_INTENSITY = 0.50f
+        /** «Un poco»: iconos lejanos blandos, todavía reconocibles. */
+        const val DEFAULT_INTENSITY = 0.48f
         const val DEFAULT_SMOOTHNESS = 0.72f
 
         @Volatile
