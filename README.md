@@ -1,51 +1,35 @@
 # CristalGiro
 
-App Android (Kotlin) que pone **todo el teléfono** bajo un cristal tipo Duo: de frente se ve normal; al girar en X el lado que se aleja se desenfoca un poco (los iconos se quedan, blandos).
+Launcher Android (Kotlin) con un cristal tipo Duo: **de frente el inicio se ve normal**; al girar en X el lado que se aleja se desenfoca un poco (los iconos se quedan, blandos).
 
-Paquete: `com.soyache.blurgiro` · versión `0.1.4` (versionCode 5).
+Paquete: `com.soyache.blurgiro` · versión `0.2.0` (versionCode 6).
 
-Sin anuncios, sin rastreo, **sin root** y **sin captura de pantalla**.
+Sin anuncios, sin rastreo, **sin root**, **sin captura de pantalla** y **sin capa sobre otras apps**.
 
-## Qué hace
+## Qué es (0.2.0)
 
-- Dieciséis bandas flotantes (`TYPE_APPLICATION_OVERLAY`) que **recubren todo el teléfono** (ancho × alto, de borde a borde), translúcidas y **no táctiles** (`FLAG_NOT_TOUCHABLE`).
-- Cada banda pide al compositor un *background blur* acotado a sus bounds (`Window.setBackgroundBlurRadius`, Android 12+). El drawable de fondo es casi invisible: solo define el recorte. No se usa `FLAG_BLUR_BEHIND` / `setBlurBehindRadius` (eso desenfoca **toda** la pantalla con un solo radio).
-- El giroscopio reparte el radio en **degradado**: lado lejano más blur, y se va suavizando hasta el lado cercano (~0). No es un parche en una esquina. De frente, radio 0 y las bandas se ocultan: **el teléfono se ve completamente normal**.
-- No se capturan píxeles para deformar la UI.
-- Servicio en primer plano con notificación permanente y silenciosa.
-- Los sensores se pausan al apagar la pantalla.
+CristalGiro **es la pantalla de inicio**. Pintamos wallpaper + iconos + dock y les aplicamos un StackBlur / degradado según el giroscopio, más un warp de perspectiva suave.
 
-## Por qué se quitó la captura (0.1.2)
+Por eso el efecto se parece a la foto de Héctor: somos dueños de esos píxeles. No leemos otras apps.
 
-0.1.2 pedía `MediaProjection` (el diálogo de «grabar pantalla»). Eso es inaceptable para este uso: no vamos a grabar el teléfono para fingir un cristal.
+- De frente: identidad. Cero blur, cero warp.
+- Giro en X hacia la derecha → la izquierda se pone un poco blanda; la derecha sigue más clara. Degradado a todo el ancho.
+- Al abrir otra app el efecto se para. Es lo esperado: ya no somos un overlay.
 
-`RenderEffect.createBlurEffect` solo desenfoca lo que **esta** ventana dibuja. No sirve para desenfocar el launcher debajo de un overlay.
+## Por qué el overlay no podía funcionar
 
-La única API pública que desenfoca píxeles de **otras** ventanas es el blur cruzado del compositor.
+0.1.x intentó recubrir el teléfono con bandas `TYPE_APPLICATION_OVERLAY` y pedir `Window.setBackgroundBlurRadius` al compositor.
 
-## Qué fallaba en 0.1.0 y 0.1.1
+Eso **solo existe** si el fabricante compiló SurfaceFlinger con blur cruzado para terceros (`WindowManager.isCrossWindowBlurEnabled`). En Samsung, Xiaomi / HyperOS y la mayoría de OEM ese flag es falso. Su propia interfaz puede tener desenfoques; no se los prestan a overlays.
 
-- 0.1.0 pintó un velo claro (brillo).
-- 0.1.1 pintó niebla mate oscura «por si el OEM no hace blur».
-- En ambos casos los iconos no se desenfocaban: se tapaban. La foto de Héctor es **defocus real**.
+Otros caminos que Héctor rechazó, y que 0.2.0 **no** usa:
 
-0.1.3 y 0.1.4 **no** vuelven a pintar un velo. Si el compositor no ofrece blur cruzado, la capa no se enciende y la UI lo dice en español.
+- `MediaProjection` (diálogo de grabar pantalla)
+- `AccessibilityService` / `takeScreenshot`
+- velo o niebla pintada
+- mandarte a «activar desenfoque de ventana» en opciones de desarrollador (ese interruptor **no existe** si el OEM no compiló el flag)
 
-## Puerta del fabricante (OEM), no un interruptor universal
-
-`WindowManager.isCrossWindowBlurEnabled` es el único indicador público. Si es falso, **el fabricante no habilitó el desenfoque del sistema para apps de terceros** en este teléfono.
-
-En AOSP, SurfaceFlinger solo ofrece *window-level blur* cuando el OEM compiló con `ro.surface_flinger.supports_background_blur=1`. El menú de desarrollador que algunos documentos mencionan **solo se muestra en esos aparatos**. Si la opción no existe, no hay nada que encender: el hardware/firmware no da blur de ventana a terceros. CristalGiro **no** te manda a Opciones de desarrollador a buscar un interruptor que en la mayoría de marcas no está.
-
-Muchos OEM (Samsung, Xiaomi / HyperOS, Huawei, Honor, OPPO, vivo, realme, OnePlus, etc.) dejan ese flag en 0 aunque su propia interfaz tenga desenfoques. Esos desenfoques del sistema no se prestan a overlays de terceros.
-
-Cuando el blur cruzado está apagado, CristalGiro:
-
-- no activa la capa
-- no pide captura de pantalla (`MediaProjection`)
-- no pinta un velo ni niebla falsa
-
-El efecto solo existe en dispositivos (o emuladores AOSP) donde el compositor aplica blur a overlays de terceros. 0.1.3 decía lo contrario a Héctor: le pedía un interruptor que su teléfono no tiene. 0.1.4 corrige ese texto.
+La única forma honesta de hacer el cristal en esos teléfonos es **ser el launcher**.
 
 ## Compilar
 
@@ -55,7 +39,7 @@ Necesitas JDK 17+ y Android SDK (plataforma 35 y build-tools 35).
 # Linux / macOS
 export ANDROID_HOME=/ruta/al/Android/Sdk
 echo "sdk.dir=$ANDROID_HOME" > local.properties
-./gradlew assembleDebug
+./gradlew assembleDebug test
 
 # El APK queda en:
 # app/build/outputs/apk/debug/app-debug.apk
@@ -66,7 +50,7 @@ En Windows (PowerShell), separa órdenes con `;`:
 ```powershell
 $env:ANDROID_HOME = "C:\Users\TU_USUARIO\AppData\Local\Android\Sdk"
 Set-Content -Path local.properties -Value "sdk.dir=$ANDROID_HOME"
-.\gradlew.bat assembleDebug
+.\gradlew.bat assembleDebug ; .\gradlew.bat test
 ```
 
 Instalar en un teléfono con depuración USB:
@@ -75,43 +59,38 @@ Instalar en un teléfono con depuración USB:
 ./gradlew installDebug
 ```
 
-## Cómo activarlo en el teléfono
+También: `./gradlew assembleRelease`.
+
+## Cómo usarlo en el teléfono
 
 1. Instala el APK (depuración USB o sideload).
-2. Abre CristalGiro.
-3. Concede **mostrar sobre otras apps** si te lo pide.
-4. En Android 13+ acepta el aviso silencioso de la notificación del servicio.
-5. Si la app dice que el fabricante no habilitó el blur para terceros, no hay un interruptor que lo arregle en este teléfono. El emulador Android 12+ AOSP suele tener el compositor con blur cruzado.
-6. Si el blur cruzado **sí** está activo, pulsa **Activar**. Sal a la pantalla de inicio. De frente no cambia nada. Gira el teléfono en X hacia la derecha: la **izquierda** se pone un poco blanda. Hacia la izquierda: al revés. Al volver de frente se quita.
+2. Android te pedirá una **app de inicio**, o ábrela desde el aviso en español de CristalGiro.
+3. Elige **CristalGiro** → **Siempre** si te lo pide.
+4. De frente no cambia nada. Gira el teléfono en X hacia la derecha: la **izquierda** se pone un poco blanda. Hacia la izquierda: al revés.
+5. Toca un icono para abrir la app. El engranaje del dock abre intensidad y suavidad.
 
-Revocar: **Desactivar** en la app o en la notificación, o quitar la superposición en Ajustes.
+Volver al launcher anterior: Ajustes → apps predeterminadas → app de inicio.
 
 ## Permisos
 
 | Permiso | Para qué |
 | --- | --- |
-| `SYSTEM_ALERT_WINDOW` | Colocar las bandas encima. No intercepta toques. |
-| Notificación (Android 13+) | Aviso silencioso del servicio. No es marketing. |
-| Servicio en primer plano `specialUse` | Mantener las bandas mientras usas otras apps. |
+| Visibilidad de paquetes (`QUERY_ALL_PACKAGES` + queries) | Listar apps instaladas con icono de launcher. |
+| Almacenamiento (Android 12 e inferior) | Intentar leer el wallpaper del sistema. Si no se puede, usamos un fondo por defecto. |
 
-No hay `MediaProjection`. No hay permiso de grabación.
+No hay `SYSTEM_ALERT_WINDOW`. No hay servicio en primer plano. No hay `MediaProjection`. No hay accesibilidad.
 
 ## Límites (honesto)
 
-- **Sin root.** Dependemos de que el compositor tenga *cross-window blur* activo (`WindowManager.isCrossWindowBlurEnabled`). Eso lo decide el OEM, no un menú de la app.
-- **Android 11 e inferior:** no existe la API. La app lo dice y no finge.
-- **Overlays `TYPE_APPLICATION_OVERLAY`:** hace falta ventana **flotante + translúcida** y un drawable de fondo que recorte el blur. Algunos OEM no aplican backdrop blur a overlays de terceros aunque el flag global esté en true.
-- **Ahorro de batería** o reproducción de vídeo pueden apagar el blur en runtime; la capa se apaga, no se sustituye por niebla.
-- Algunos equipos limitan cuántas overlays se pueden crear; si el sistema rechaza una banda, esa franja no aparece.
-- Gasta GPU: radios altos (>150 px) los evitamos (AOSP recomienda no pasar de ~80–150).
-- El esquema de la app **no** es el efecto real: solo muestra qué bandas pedirían radio.
-
-CristalGiro no elude esas políticas y no usa captura de pantalla.
+- El cristal **solo** vive en el inicio de CristalGiro. Al salir a otra app no hay efecto. No es un fallo: ya no tapamos el sistema.
+- Algunos OEM no dejan leer el wallpaper a un launcher de terceros. Entonces verás el fondo oscuro de la app; los iconos y el blur siguen.
+- Android 11+ oculta paquetes si no declaramos queries. Traemos `QUERY_ALL_PACKAGES` y el intent `MAIN`/`LAUNCHER`.
+- Gasta un poco de GPU/CPU al inclinar (StackBlur de la escena). En reposo no desenfoca.
 
 ## Privacidad
 
 - Sin red, sin anuncios, sin analítica.
-- Solo guarda en el teléfono intensidad, suavidad, modo y si pediste activar la capa.
+- Solo guarda en el teléfono intensidad, suavidad, modo y si ocultaste el aviso de «elegir inicio».
 - No se incluyen secretos ni claves en el repositorio.
 
 ## Licencia de uso

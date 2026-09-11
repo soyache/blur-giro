@@ -1,6 +1,7 @@
 package com.soyache.blurgiro.ui
 
 import android.app.Application
+import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -8,12 +9,19 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.viewModelScope
 import com.soyache.blurgiro.data.AppSettings
 import com.soyache.blurgiro.data.BlurMode
-import com.soyache.blurgiro.effect.CrossWindowBlur
+import com.soyache.blurgiro.launcher.HomeRole
+import com.soyache.blurgiro.launcher.InstalledApps
+import com.soyache.blurgiro.launcher.LaunchApp
+import com.soyache.blurgiro.launcher.WallpaperStore
 import com.soyache.blurgiro.sensor.TiltTracker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-class HomeViewModel(application: Application) : AndroidViewModel(application) {
+class LauncherViewModel(application: Application) : AndroidViewModel(application) {
 
     val settings = AppSettings.get(application)
 
@@ -27,10 +35,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var tiltY by mutableFloatStateOf(0f)
         private set
-    var crossWindowBlurEnabled by mutableStateOf(CrossWindowBlur.isEnabled(application))
+    var grid by mutableStateOf<List<LaunchApp>>(emptyList())
         private set
-
-    val blurApiSupported: Boolean = CrossWindowBlur.isApiSupported()
+    var dock by mutableStateOf<List<LaunchApp>>(emptyList())
+        private set
+    var wallpaper by mutableStateOf<Bitmap?>(null)
+        private set
+    var isDefaultHome by mutableStateOf(HomeRole.isDefaultHome(application))
+        private set
+    var hideHomeHint by mutableStateOf(settings.laterHomeHint)
+        private set
+    var loading by mutableStateOf(true)
+        private set
 
     private val tracker = TiltTracker(
         context = application,
@@ -41,24 +57,44 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         },
     )
 
-    private val stopBlurListen = CrossWindowBlur.listen(application) { enabled ->
-        crossWindowBlurEnabled = enabled
-    }
-
     val hasSensor: Boolean get() = tracker.hasSensor
 
     val previewLifecycle = object : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
             tracker.start()
+            refreshHomeRole()
         }
 
         override fun onStop(owner: LifecycleOwner) {
             tracker.stop()
+            tiltX = 0f
+            tiltY = 0f
         }
     }
 
-    fun refreshBlurState() {
-        crossWindowBlurEnabled = CrossWindowBlur.isEnabled(getApplication())
+    init {
+        viewModelScope.launch {
+            val catalog = withContext(Dispatchers.Default) {
+                InstalledApps.load(getApplication())
+            }
+            val paper = withContext(Dispatchers.Default) {
+                WallpaperStore.load(getApplication())
+            }
+            grid = catalog.grid
+            dock = catalog.dock
+            wallpaper = paper
+            loading = false
+        }
+    }
+
+    fun refreshHomeRole() {
+        isDefaultHome = HomeRole.isDefaultHome(getApplication())
+        if (isDefaultHome) hideHomeHint = true
+    }
+
+    fun dismissHomeHint() {
+        hideHomeHint = true
+        settings.laterHomeHint = true
     }
 
     fun updateIntensity(value: Float) {
@@ -77,7 +113,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
-        stopBlurListen.invoke()
         tracker.stop()
         super.onCleared()
     }
