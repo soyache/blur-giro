@@ -1,7 +1,20 @@
 package com.soyache.blurgiro.launcher
 
-import android.graphics.RectF
 import kotlin.math.floor
+
+data class Box(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+) {
+    val width: Float get() = right - left
+    val height: Float get() = bottom - top
+    fun centerX(): Float = (left + right) * 0.5f
+    fun centerY(): Float = (top + bottom) * 0.5f
+    fun contains(x: Float, y: Float): Boolean =
+        x >= left && x < right && y >= top && y < bottom
+}
 
 /**
  * Geometría compartida del home: grid paginado + dock. La vista pinta
@@ -68,26 +81,26 @@ object HomeLayout {
 
     fun pageCount(appCount: Int): Int = if (appCount <= 0) 1 else (appCount + PAGE_SIZE - 1) / PAGE_SIZE
 
-    fun cellRect(indexOnPage: Int, page: Int, scrollX: Float, m: Metrics): RectF {
+    fun cellRect(indexOnPage: Int, page: Int, scrollX: Float, m: Metrics): Box {
         val col = indexOnPage % COLUMNS
         val row = indexOnPage / COLUMNS
         val left = m.padLeft + col * m.cellW + page * m.pageWidth - scrollX
         val top = m.padTop + row * m.cellH
-        return RectF(left, top, left + m.cellW, top + m.cellH)
+        return Box(left, top, left + m.cellW, top + m.cellH)
     }
 
-    fun dockRect(slot: Int, m: Metrics): RectF {
+    fun dockRect(slot: Int, m: Metrics): Box {
         val usable = (m.width - m.padLeft - m.padRight).coerceAtLeast(1f)
         val slotW = usable / DOCK_SLOTS
         val left = m.padLeft + slot * slotW
-        return RectF(left, m.dockTop, left + slotW, m.height - m.padBottom)
+        return Box(left, m.dockTop, left + slotW, m.height - m.padBottom)
     }
 
-    fun iconRect(cell: RectF, m: Metrics): RectF {
+    fun iconRect(cell: Box, m: Metrics): Box {
         val size = m.iconSize
         val cx = cell.centerX()
-        val cy = cell.top + cell.height() * 0.38f
-        return RectF(cx - size / 2f, cy - size / 2f, cx + size / 2f, cy + size / 2f)
+        val cy = cell.top + cell.height * 0.38f
+        return Box(cx - size / 2f, cy - size / 2f, cx + size / 2f, cy + size / 2f)
     }
 
     fun hitApp(

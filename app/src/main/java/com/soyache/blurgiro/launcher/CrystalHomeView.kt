@@ -330,13 +330,13 @@ class CrystalHomeView @JvmOverloads constructor(
         canvas.drawBitmap(paper, srcRect, dstRect, bitmapPaint)
     }
 
-    private fun drawCell(canvas: Canvas, cell: RectF, app: LaunchApp, m: HomeLayout.Metrics) {
+    private fun drawCell(canvas: Canvas, cell: Box, app: LaunchApp, m: HomeLayout.Metrics) {
         if (cell.right < 0f || cell.left > width) return
         val icon = HomeLayout.iconRect(cell, m)
         drawIcon(canvas, app.icon, icon)
         textPaint.textSize = m.iconSize * 0.22f
         val labelY = icon.bottom + textPaint.textSize * 1.25f
-        val label = ellipsize(app.label, cell.width() * 0.88f)
+        val label = ellipsize(app.label, cell.width * 0.88f)
         canvas.drawText(label, cell.centerX(), labelY, textPaint)
     }
 
@@ -371,10 +371,11 @@ class CrystalHomeView @JvmOverloads constructor(
         }
     }
 
-    private fun drawIcon(canvas: Canvas, icon: Bitmap, dest: RectF) {
+    private fun drawIcon(canvas: Canvas, icon: Bitmap, dest: Box) {
         if (icon.isRecycled) return
         iconSrc.set(0, 0, icon.width, icon.height)
-        canvas.drawBitmap(icon, iconSrc, dest, bitmapPaint)
+        dstRect.set(dest.left, dest.top, dest.right, dest.bottom)
+        canvas.drawBitmap(icon, iconSrc, dstRect, bitmapPaint)
     }
 
     private fun ellipsize(text: String, maxWidth: Float): String {

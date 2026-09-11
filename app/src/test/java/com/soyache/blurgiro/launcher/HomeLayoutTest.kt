@@ -21,7 +21,7 @@ class HomeLayoutTest {
         assertTrue(first.left >= m.padLeft - 0.1f)
         assertTrue(last.right <= m.width - m.padRight + 0.1f)
         assertTrue(last.bottom <= m.gridBottom + 0.1f)
-        assertTrue(HomeLayout.iconRect(first, m).width() > 20f)
+        assertTrue(HomeLayout.iconRect(first, m).width > 20f)
     }
 
     @Test
