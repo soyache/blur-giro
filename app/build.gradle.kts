@@ -1,7 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -10,13 +8,26 @@ android {
 
     defaultConfig {
         applicationId = "com.soyache.blurgiro"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.2.0"
-
+        versionCode = 7
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+    }
+
+    flavorDimensions += "api"
+    productFlavors {
+        create("compat") {
+            dimension = "api"
+            minSdk = 29
+            buildConfigField("String", "FLAVOR_LABEL", "\"Android 10–13\"")
+        }
+        create("standard") {
+            dimension = "api"
+            minSdk = 34
+            buildConfigField("String", "FLAVOR_LABEL", "\"Android 14+\"")
+        }
     }
 
     buildTypes {
@@ -37,13 +48,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    buildFeatures {
+        aidl = true
+        buildConfig = true
     }
 
-    buildFeatures {
-        compose = true
-        buildConfig = true
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 
     packaging {
@@ -54,24 +65,9 @@ android {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
-    implementation(composeBom)
-    androidTestImplementation(composeBom)
-
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("androidx.core:core:1.15.0")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
-
-    debugImplementation("androidx.compose.ui:ui-tooling")
-
+    implementation(project(":motion"))
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
+    implementation("androidx.annotation:annotation:1.9.1")
     testImplementation("junit:junit:4.13.2")
 }

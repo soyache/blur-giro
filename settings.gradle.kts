@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CristalGiro"
 include(":app")
+include(":motion")

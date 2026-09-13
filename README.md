@@ -1,48 +1,65 @@
 # CristalGiro
 
-Launcher Android (Kotlin) con un cristal tipo Duo: **de frente el inicio se ve normal**; al girar en X el lado que se aleja se desenfoca un poco (los iconos se quedan, blandos).
+Efecto de cristal tipo Duo **en toda la interfaz del teléfono**, no solo en un launcher.
 
-Paquete: `com.soyache.blurgiro` · versión `0.2.0` (versionCode 6).
+Paquete: `com.soyache.blurgiro` · versión **0.3.0** (versionCode 7).
 
-Sin anuncios, sin rastreo, **sin root**, **sin captura de pantalla** y **sin capa sobre otras apps**.
+Sin anuncios, sin rastreo, **sin root**. No pedimos el diálogo de «grabar pantalla» (`MediaProjection`).
 
-## Qué es (0.2.0)
+La captura y la reproyección OpenGL siguen el enfoque que ya funciona en
+[DuoFold-Android v0.6.0](https://github.com/jcx396905-gif/DuoFold-Android) (MIT, jcx / jcx396905-gif).
+Ver [NOTICE.md](NOTICE.md) y `app/src/main/assets/THIRD_PARTY_NOTICES.txt`.
 
-CristalGiro **es la pantalla de inicio**. Pintamos wallpaper + iconos + dock y les aplicamos un StackBlur / degradado según el giroscopio, más un warp de perspectiva suave.
+## Qué es (0.3.0)
 
-Por eso el efecto se parece a la foto de Héctor: somos dueños de esos píxeles. No leemos otras apps.
+CristalGiro recubre **cualquier app** con una capa de accesibilidad. Un servicio
+Shizuku (UserService con privilegio de shell) captura el fotograma con
+`ScreenCapture` / `ScreenCaptureInternal` / `SurfaceControl` / captura antigua.
+OpenGL ES lo vuelve a proyectar con el giroscopio / game-rotation-vector:
+perspectiva + blur esmerilado direccional.
 
-- De frente: identidad. Cero blur, cero warp.
-- Giro en X hacia la derecha → la izquierda se pone un poco blanda; la derecha sigue más clara. Degradado a todo el ancho.
-- Al abrir otra app el efecto se para. Es lo esperado: ya no somos un overlay.
+- De frente: identidad. Cero warp, la capa se vuelve transparente.
+- Giro en X: el lado que se aleja se pone blando; el frontal sigue limpio.
+- La capa del efecto se excluye de la captura (`setSkipScreenshot` / `setExcludeLayers`) para no recogerse a sí misma.
+- Si la captura falla, **no** pintamos una niebla falsa: verás los pasos en español (Shizuku + accesibilidad).
 
-## Por qué el overlay no podía funcionar
+El launcher-home de 0.2.0 ya no es el producto. Esta versión no se registra como app de inicio.
 
-0.1.x intentó recubrir el teléfono con bandas `TYPE_APPLICATION_OVERLAY` y pedir `Window.setBackgroundBlurRadius` al compositor.
+## Sabores
 
-Eso **solo existe** si el fabricante compiló SurfaceFlinger con blur cruzado para terceros (`WindowManager.isCrossWindowBlurEnabled`). En Samsung, Xiaomi / HyperOS y la mayoría de OEM ese flag es falso. Su propia interfaz puede tener desenfoques; no se los prestan a overlays.
+| APK | minSdk | Uso |
+| --- | --- | --- |
+| `standard` | 34 (Android 14+) | Captura en vivo + corrección táctil de accesibilidad |
+| `compat` | 29 (Android 10–13) | Mismos backends con sondeo; en 10/11 la capa no se puede excluir por capa, así que se congela un fotograma limpio al arrancar |
 
-Otros caminos que Héctor rechazó, y que 0.2.0 **no** usa:
+Una sola base de código: el puente prueba los backends en tiempo de ejecución.
 
-- `MediaProjection` (diálogo de grabar pantalla)
-- `AccessibilityService` / `takeScreenshot`
-- velo o niebla pintada
-- mandarte a «activar desenfoque de ventana» en opciones de desarrollador (ese interruptor **no existe** si el OEM no compiló el flag)
+## Requisitos
 
-La única forma honesta de hacer el cristal en esos teléfonos es **ser el launcher**.
+- Android 10 o superior (14+ para el sabor estándar).
+- [Shizuku](https://github.com/RikkaApps/Shizuku) instalado y **en marcha** (depuración inalámbrica o ADB). **No hace falta root.**
+- Servicio de accesibilidad de CristalGiro activado.
+
+## Cómo usarlo
+
+1. Instala el APK que corresponda a tu Android.
+2. Abre Shizuku e inicia el servicio.
+3. En CristalGiro: **01 Instalar e iniciar Shizuku** (abre Shizuku) → **02 Autorizar Shizuku**.
+4. **03 Activar accesibilidad**: busca CristalGiro y actívalo.
+5. Sujeta el teléfono de frente y pulsa **04 Probar 10 segundos**. Inclina en X.
+6. Si te convence, **05 Activar efecto global**.
+7. Android 14+: tres dedos a la vez, o «Detener» en la notificación. Android 10–13: la notificación.
+
+Si la accesibilidad aparece conectada pero el efecto no arranca, apágala y vuélvela a encender. En algunos Xiaomi la corrección táctil pide **Depuración USB (ajustes de seguridad)**.
 
 ## Compilar
 
-Necesitas JDK 17+ y Android SDK (plataforma 35 y build-tools 35).
+JDK 17+ y Android SDK (plataforma 35, build-tools 35).
 
 ```bash
-# Linux / macOS
 export ANDROID_HOME=/ruta/al/Android/Sdk
 echo "sdk.dir=$ANDROID_HOME" > local.properties
-./gradlew assembleDebug test
-
-# El APK queda en:
-# app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleDebug assembleRelease :motion:test :app:test
 ```
 
 En Windows (PowerShell), separa órdenes con `;`:
@@ -50,49 +67,42 @@ En Windows (PowerShell), separa órdenes con `;`:
 ```powershell
 $env:ANDROID_HOME = "C:\Users\TU_USUARIO\AppData\Local\Android\Sdk"
 Set-Content -Path local.properties -Value "sdk.dir=$ANDROID_HOME"
-.\gradlew.bat assembleDebug ; .\gradlew.bat test
+.\gradlew.bat assembleDebug ; .\gradlew.bat assembleRelease ; .\gradlew.bat :motion:test
 ```
 
-Instalar en un teléfono con depuración USB:
+APKs:
 
-```bash
-./gradlew installDebug
-```
-
-También: `./gradlew assembleRelease`.
-
-## Cómo usarlo en el teléfono
-
-1. Instala el APK (depuración USB o sideload).
-2. Android te pedirá una **app de inicio**, o ábrela desde el aviso en español de CristalGiro.
-3. Elige **CristalGiro** → **Siempre** si te lo pide.
-4. De frente no cambia nada. Gira el teléfono en X hacia la derecha: la **izquierda** se pone un poco blanda. Hacia la izquierda: al revés.
-5. Toca un icono para abrir la app. El engranaje del dock abre intensidad y suavidad.
-
-Volver al launcher anterior: Ajustes → apps predeterminadas → app de inicio.
+- `app/build/outputs/apk/standard/debug/app-standard-debug.apk`
+- `app/build/outputs/apk/compat/debug/app-compat-debug.apk`
+- equivalentes `release/`
 
 ## Permisos
 
-| Permiso | Para qué |
+| Permiso / servicio | Para qué |
 | --- | --- |
-| Visibilidad de paquetes (`QUERY_ALL_PACKAGES` + queries) | Listar apps instaladas con icono de launcher. |
-| Almacenamiento (Android 12 e inferior) | Intentar leer el wallpaper del sistema. Si no se puede, usamos un fondo por defecto. |
+| Shizuku (UserService) | Captura privilegiada e inyección táctil. Sin diálogo de MediaProjection. |
+| Accesibilidad | Capa a pantalla completa y, en Android 14+, corrección de toques. |
+| Notificaciones | Botón para detener el efecto. |
 
-No hay `SYSTEM_ALERT_WINDOW`. No hay servicio en primer plano. No hay `MediaProjection`. No hay accesibilidad.
+Sin `SYSTEM_ALERT_WINDOW`. Sin red. Sin root.
 
 ## Límites (honesto)
 
-- El cristal **solo** vive en el inicio de CristalGiro. Al salir a otra app no hay efecto. No es un fallo: ya no tapamos el sistema.
-- Algunos OEM no dejan leer el wallpaper a un launcher de terceros. Entonces verás el fondo oscuro de la app; los iconos y el blur siguen.
-- Android 11+ oculta paquetes si no declaramos queries. Traemos `QUERY_ALL_PACKAGES` y el intent `MAIN`/`LAUNCHER`.
-- Gasta un poco de GPU/CPU al inclinar (StackBlur de la escena). En reposo no desenfoca.
+- Contenido con `FLAG_SECURE` o protegido puede salir negro. El efecto se corta y vuelve a la pantalla original.
+- Android 10/11 no tiene exclusión por capa: el sabor compat anima **un** fotograma real capturado al arrancar (o al rotar).
+- Android 10–13 no tienen la API de corrección táctil de Android 14. Si cuesta pulsar inclinado, vuelve a la pose calibrada.
+- Gasta GPU y batería. Tope de captura 1080 px de ancho y 30 FPS, como DuoFold.
+- OEM distintos pueden limitar captura o capas. Probado por DuoFold en Xiaomi 15 / Android 16; tu fabricante puede variar.
+- No reordena iconos ni layouts de otras apps: solo cambia el fotograma final.
 
 ## Privacidad
 
-- Sin red, sin anuncios, sin analítica.
-- Solo guarda en el teléfono intensidad, suavidad, modo y si ocultaste el aviso de «elegir inicio».
-- No se incluyen secretos ni claves en el repositorio.
+- Sin permiso de Internet.
+- La imagen de pantalla no se guarda ni se sube.
+- Solo se guardan en el teléfono intensidad, ángulo, eje Z, estilo y el último estado.
 
-## Licencia de uso
+## Atribución
 
-Código para uso personal. Compílalo e instálalo tú; no se distribuye un binario firmado de producción en este repo.
+Arquitectura de captura / overlay / GL adaptada de **DuoFold** (MIT) de
+[jcx396905-gif](https://github.com/jcx396905-gif/DuoFold-Android). CristalGiro
+cambia paquete, marca y textos; no quita sus avisos de copyright.
