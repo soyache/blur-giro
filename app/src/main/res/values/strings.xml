@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">CristalGiro</string>
-    <string name="settings_shortcut">Ajustes</string>
-    <string name="cannot_open_app">No pude abrir %1$s</string>
+    <string name="accessibility_label">CristalGiro efecto de pantalla</string>
+    <string name="accessibility_summary">Muestra el cristal en toda la UI y corrige el toque</string>
+    <string name="accessibility_description">CristalGiro usa accesibilidad para poner la capa del efecto sobre todo el teléfono y, en Android 14+, recibir toques y devolverlos a la app de debajo con coordenadas corregidas a través de Shizuku. La imagen se trata solo en la memoria de este teléfono: no se guarda ni se sube. El efecto solo arranca cuando lo pides en la app. Tres dedos a la vez o el botón Detener de la notificación lo apagan. Al parar, desconectar o apagar la pantalla se restaura el toque original. No grabamos la pantalla con MediaProjection.</string>
 </resources>

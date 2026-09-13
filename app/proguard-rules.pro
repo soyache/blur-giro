@@ -1,2 +1,7 @@
-# CristalGiro 0.2.0 no ofusca; reglas listas por si se activa minify.
--keep class com.soyache.blurgiro.LauncherActivity { *; }
+# Shizuku UserService and AIDL must stay constructible by name.
+-keep class com.soyache.blurgiro.bridge.CaptureBridge { *; }
+-keep class com.soyache.blurgiro.bridge.ICrystalBridge { *; }
+-keep class com.soyache.blurgiro.bridge.ICrystalBridge$* { *; }
+-keep class com.soyache.blurgiro.bridge.ICaptureListener { *; }
+-keep class com.soyache.blurgiro.bridge.ICaptureListener$* { *; }
+-keep class com.soyache.blurgiro.CrystalService { *; }
